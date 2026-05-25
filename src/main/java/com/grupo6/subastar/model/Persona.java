@@ -34,8 +34,12 @@ public class Persona {
     private String estado;
 
     @Lob
-    @Column(name = "foto")
-    private byte[] foto;
+    @Column(name = "fotoFrente", columnDefinition = "LONGBLOB")
+    private byte[] fotoFrente;
+
+    @Lob
+    @Column(name = "fotoDorso", columnDefinition = "LONGBLOB")
+    private byte[] fotoDorso;
 
     // Constructores
     public Persona() {}
@@ -65,6 +69,10 @@ public class Persona {
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
 
-    public byte[] getFoto() { return foto; }
-    public void setFoto(byte[] foto) { this.foto = foto; }
+    // No te olvides de agregar los Getters y Setters para fotoFrente y fotoDorso abajo de todo
+    public byte[] getFotoFrente() { return fotoFrente; }
+    public void setFotoFrente(byte[] fotoFrente) { this.fotoFrente = fotoFrente; }
+
+    public byte[] getFotoDorso() { return fotoDorso; }
+    public void setFotoDorso(byte[] fotoDorso) { this.fotoDorso = fotoDorso; }
 }

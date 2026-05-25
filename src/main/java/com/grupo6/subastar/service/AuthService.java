@@ -6,10 +6,14 @@ import com.grupo6.subastar.model.Persona;
 import com.grupo6.subastar.model.Pais;
 import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.PersonaRepository;
+
+import java.util.Base64;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class AuthService {
@@ -24,7 +28,7 @@ public class AuthService {
     private PasswordEncoder passwordEncoder;
 
     @Transactional
-    public void registrarCliente(RegistroRequest req) throws Exception {
+    public void registrarCliente(RegistroRequest req, MultipartFile fotoFrente, MultipartFile fotoDorso) throws Exception {
         
         // 1. Validar unicidad del email
         if (personaRepository.existsByEmail(req.getEmail())) {
@@ -40,7 +44,14 @@ public class AuthService {
         p.setDireccion(req.getDireccion());
         p.setFechaNacimiento(req.getFechaNacimiento());
         p.setEstado("activo"); 
-        p.setFoto(null); 
+
+        // LÓGICA MULTIPART PARA LAS FOTOS
+        if (fotoFrente != null && !fotoFrente.isEmpty()) {
+            p.setFotoFrente(fotoFrente.getBytes());
+        }
+        if (fotoDorso != null && !fotoDorso.isEmpty()) {
+            p.setFotoDorso(fotoDorso.getBytes());
+        }
 
         personaRepository.save(p);
         personaRepository.flush(); 
@@ -50,14 +61,14 @@ public class AuthService {
         c.setPersona(p); 
         c.setClave(passwordEncoder.encode(req.getClave())); 
         
-        // CORRECCIÓN: Asignamos el objeto Pais usando el ID del request
         Pais pais = new Pais();
-        pais.setId(req.getNumeroPais());
+        pais.setId(req.getNumeroPais()); 
         c.setPais(pais);
 
         c.setAdmitido("no"); 
         c.setCategoria("comun"); 
-        c.setVerificador("0000"); 
+        // Asignamos un ID de empleado válido para la FK (como el 1)
+        c.setVerificadorId(1); 
         c.setFechaAprobacion(null); 
 
         clienteRepository.save(c);

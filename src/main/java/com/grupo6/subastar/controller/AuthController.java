@@ -24,6 +24,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/auth")
@@ -45,14 +46,16 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
-    @PostMapping("/registro")
-    public ResponseEntity<?> registrar(@RequestBody RegistroRequest request) {
+    @PostMapping(value = "/registro", consumes = {"multipart/form-data"})
+    public ResponseEntity<?> registrar(
+            @ModelAttribute RegistroRequest request,
+            @RequestParam(value = "fotoFrente", required = false) MultipartFile fotoFrente,
+            @RequestParam(value = "fotoDorso", required = false) MultipartFile fotoDorso) {
         try {
-            authService.registrarCliente(request);
-            // Si todo sale bien, devolvemos un 200 OK con un JSON simple
-            return ResponseEntity.ok().body("{\"mensaje\": \"Registro exitoso\"}");
+            // Le pasamos los datos y los archivos al servicio
+            authService.registrarCliente(request, fotoFrente, fotoDorso);
+            return ResponseEntity.ok().body("{\"mensaje\": \"Registro exitoso con fotos\"}");
         } catch (Exception e) {
-            // Si hay un error (ej: email duplicado), devolvemos un 400 Bad Request
             return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");
         }
     }
