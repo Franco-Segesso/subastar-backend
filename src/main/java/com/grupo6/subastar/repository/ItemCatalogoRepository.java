@@ -1,0 +1,18 @@
+package com.grupo6.subastar.repository;
+
+import com.grupo6.subastar.model.ItemCatalogo;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+
+@Repository
+public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, Integer> {
+    
+    // Busca un ítem asegurando que pertenezca al catálogo de la subasta indicada
+    @Query("SELECT i FROM ItemCatalogo i WHERE i.id = :itemId AND i.catalogo.subasta.id = :subastaId")
+    Optional<ItemCatalogo> findByIdAndSubastaId(
+            @Param("subastaId") Integer subastaId, 
+            @Param("itemId") Integer itemId);
+}
