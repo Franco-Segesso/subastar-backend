@@ -61,12 +61,13 @@ public class AuthController {
     }
 
 
-
+/* 
     // ENDPOINT TEMPORAL PARA GENERAR UN HASH PERFECTO
     @GetMapping("/generar-hash")
     public String generarHash() {
         return passwordEncoder.encode("123456");
     }
+    */
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
