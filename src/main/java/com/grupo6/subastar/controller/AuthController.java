@@ -2,7 +2,7 @@ package com.grupo6.subastar.controller;
 
 
 import com.grupo6.subastar.repository.ClienteRepository;
-
+import com.grupo6.subastar.dto.ActivarRequest;
 import com.grupo6.subastar.dto.ClienteDTO;
 import com.grupo6.subastar.dto.LoginRequest;
 import com.grupo6.subastar.dto.LoginResponse;
@@ -36,9 +36,7 @@ public class AuthController {
     @Autowired
     private JwtUtils jwtUtils;
 
-    // INYECTAMOS EL ENCODER PARA NUESTRA PRUEBA
-    @Autowired
-    private PasswordEncoder passwordEncoder; 
+    
 
 
 
@@ -49,8 +47,8 @@ public class AuthController {
     @PostMapping(value = "/registro", consumes = {"multipart/form-data"})
     public ResponseEntity<?> registrar(
             @ModelAttribute RegistroRequest request,
-            @RequestParam(value = "fotoFrente", required = false) MultipartFile fotoFrente,
-            @RequestParam(value = "fotoDorso", required = false) MultipartFile fotoDorso) {
+            @RequestParam(value = "fotoDniFrente", required = false) MultipartFile fotoFrente,
+            @RequestParam(value = "fotoDniDorso", required = false) MultipartFile fotoDorso) {
         try {
             // Le pasamos los datos y los archivos al servicio
             authService.registrarCliente(request, fotoFrente, fotoDorso);
@@ -106,6 +104,18 @@ public class AuthController {
         } catch (Exception e) {
             System.err.println(">> FALLO: Error interno - " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error interno del servidor.");
+        }
+    }
+
+
+    @PostMapping("/activar")
+    public ResponseEntity<?> activar(@RequestBody ActivarRequest request) {
+        try {
+            authService.activarCuenta(request);
+            // El documento exige devolver un token y un mensaje
+            return ResponseEntity.ok().body("{\"token\": \"token_generado_aqui\", \"mensaje\": \"Cuenta activada. Ya podés iniciar sesión.\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");
         }
     }
 }
