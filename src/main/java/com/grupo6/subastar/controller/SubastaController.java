@@ -27,9 +27,10 @@ public class SubastaController {
             @RequestParam(required = false) String estado,
             @RequestParam(required = false) String categoria,
             @RequestParam(required = false) String moneda,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate fecha,
             @RequestHeader(value = "Authorization", required = false) String token) {
 
-        List<Subasta> subastas = subastaRepository.findByFiltros(estado, categoria, moneda);
+        List<Subasta> subastas = subastaRepository.findByFiltros(estado, categoria, moneda, fecha);
         
         // Regra de negocio: Si el usuario es invitado (no hay token), se ocultan los precios base de los catálogos
         if (token == null || token.isEmpty()) {
