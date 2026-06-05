@@ -11,4 +11,7 @@ public interface PersonaRepository extends JpaRepository<Persona, Integer> {
     Optional<Persona> findByEmail(String email);
 
     boolean existsByEmail(String email);
+    
+    // NUEVA LÍNEA: Validar por documento
+    boolean existsByDocumento(String documento);
 }
