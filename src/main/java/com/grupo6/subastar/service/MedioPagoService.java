@@ -42,6 +42,7 @@ public class MedioPagoService {
 
         TarjetaCredito tarjeta = new TarjetaCredito();
         tarjeta.setCliente(cliente);
+        tarjeta.setActivo("si");
         tarjeta.setUltimosDigitos(req.getUltimosDigitos());
         tarjeta.setVencimiento(req.getVencimiento());
         tarjeta.setTitular(req.getTitular());
@@ -59,6 +60,7 @@ public class MedioPagoService {
 
         CuentaBancaria cuenta = new CuentaBancaria();
         cuenta.setCliente(cliente);
+        cuenta.setActivo("si");
         cuenta.setCbuIban(req.getCbuIban());
         cuenta.setAlias(req.getAlias());
         cuenta.setBanco(req.getBanco());
@@ -77,6 +79,7 @@ public class MedioPagoService {
 
         ChequeCertificado cheque = new ChequeCertificado();
         cheque.setCliente(cliente);
+        cheque.setActivo("si");
         cheque.setNroCheque(req.getNroCheque());
         cheque.setBanco(req.getBanco());
         cheque.setMoneda(req.getMoneda());
