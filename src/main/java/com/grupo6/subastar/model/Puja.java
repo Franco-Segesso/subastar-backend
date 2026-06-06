@@ -2,6 +2,7 @@ package com.grupo6.subastar.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 @Entity
@@ -19,11 +20,8 @@ public class Puja {
     @Column(name = "importe", nullable = false)
     private Double importe;
 
-    @Column(name = "fecha")
-    private LocalDate fecha;
-
-    @Column(name = "hora")
-    private LocalTime hora;
+    @Column(name = "fechaHora") // Nombre real en tu DB
+    private LocalDateTime fechaHora;
 
     // Relación con el Ítem del Catálogo (La columna clave de tu foto)
     @ManyToOne(fetch = FetchType.LAZY)
@@ -48,11 +46,8 @@ public class Puja {
     public Double getImporte() { return importe; }
     public void setImporte(Double importe) { this.importe = importe; }
 
-    public LocalDate getFecha() { return fecha; }
-    public void setFecha(LocalDate fecha) { this.fecha = fecha; }
-
-    public LocalTime getHora() { return hora; }
-    public void setHora(LocalTime hora) { this.hora = hora; }
+    public LocalDateTime getFechaHora() { return fechaHora; }
+    public void setFechaHora(LocalDateTime fechaHora) { this.fechaHora = fechaHora; }
 
     public ItemCatalogo getItemCatalogo() { return itemCatalogo; }
     public void setItemCatalogo(ItemCatalogo itemCatalogo) { this.itemCatalogo = itemCatalogo; }

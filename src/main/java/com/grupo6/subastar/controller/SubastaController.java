@@ -1,20 +1,17 @@
 package com.grupo6.subastar.controller;
-
 import com.grupo6.subastar.model.Subasta;
 import com.grupo6.subastar.model.Duenio;
 import com.grupo6.subastar.model.ItemCatalogo;
 import com.grupo6.subastar.model.Persona;
 import com.grupo6.subastar.model.Producto;
 import com.grupo6.subastar.repository.SubastaRepository;
+import com.grupo6.subastar.service.SubastaService;
 import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.ItemCatalogoRepository;
-import com.grupo6.subastar.repository.PersonaRepository;
 import com.grupo6.subastar.repository.PujaRepository;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Optional;
 
@@ -28,14 +25,15 @@ public class SubastaController {
     @Autowired
     private PujaRepository pujaRepository;
 
-    @Autowired
-    private PersonaRepository personaRepository;
 
     @Autowired
     private ItemCatalogoRepository itemCatalogoRepository;
 
     @Autowired
     private DuenioRepository duenioRepository;
+
+    @Autowired
+    private SubastaService subastaService;
 
 
     // 1. GET /v1/subastas (Listado general con filtros opcionales)
@@ -140,6 +138,61 @@ public class SubastaController {
                 p.setNombreDuenioReal("Dueño Desconocido");
             }
         }
+    }
+
+
+    // 4. POST /subastas/{id}/ingresar
+    @PostMapping("/{id}/ingresar")
+    public ResponseEntity<?> ingresarSubasta(
+            @PathVariable Integer id,
+            @RequestHeader(value = "Authorization") String token) {
+        try {
+            // Spring Security te permite obtener el usuario autenticado (email) del contexto
+            String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            subastaService.ingresarSala(id, email);
+            return ResponseEntity.ok().build(); // 200 OK
+        } catch (RuntimeException e) {
+            return manejarExcepciones(e);
+        }
+    }
+
+    // 5. POST /subastas/{id}/salir
+    @PostMapping("/{id}/salir")
+    public ResponseEntity<?> salirSubasta(
+            @PathVariable Integer id,
+            @RequestHeader(value = "Authorization") String token) {
+        try {
+            String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            subastaService.salirSala(id, email);
+            return ResponseEntity.ok().build(); // 200 OK
+        } catch (RuntimeException e) {
+            return manejarExcepciones(e);
+        }
+    }
+
+    // 6. POST /subastas/{id}/pujas
+    @PostMapping("/{id}/pujas")
+    public ResponseEntity<?> registrarPuja(
+            @PathVariable Integer id,
+            @RequestBody com.grupo6.subastar.dto.PujaRequest request,
+            @RequestHeader(value = "Authorization") String token) {
+        try {
+            String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+            Object response = subastaService.procesarPuja(id, request, email);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(response); // 201 Created
+        } catch (RuntimeException e) {
+            return manejarExcepciones(e);
+        }
+    }
+
+    // Helper para parsear tus excepciones a los HTTP Status exactos de la consigna
+    private ResponseEntity<?> manejarExcepciones(RuntimeException e) {
+        String msg = e.getMessage();
+        if (msg.startsWith("400")) return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST).body(msg);
+        if (msg.startsWith("403")) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(msg);
+        if (msg.startsWith("404")) return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(msg);
+        if (msg.startsWith("409")) return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(msg);
+        return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("500: Error interno del servidor");
     }
 }
 

@@ -1,9 +1,13 @@
 package com.grupo6.subastar.repository;
 
+import com.grupo6.subastar.model.ItemCatalogo;
 import com.grupo6.subastar.model.Puja;
+
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.Optional;
 
 public interface PujaRepository extends JpaRepository<Puja, Integer> {
 
@@ -14,4 +18,7 @@ public interface PujaRepository extends JpaRepository<Puja, Integer> {
     // Cuenta los postores recorriendo el mismo camino
     @Query("SELECT COUNT(DISTINCT p.asistente.cliente.id) FROM Puja p WHERE p.itemCatalogo.catalogo.subasta.id = :idSubasta")
     Integer countDistinctPostoresBySubastaId(@Param("idSubasta") Integer idSubasta);
+
+    // Recupera la puja más alta para un ítem en particular
+    Optional<Puja> findTopByItemCatalogoOrderByImporteDesc(ItemCatalogo item);
 }
