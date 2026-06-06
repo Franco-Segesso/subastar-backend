@@ -34,6 +34,15 @@ public class Subasta {
     @OneToOne(mappedBy = "subasta", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private Catalogo catalogo;
 
+    @Transient
+    private Double mejorOferta;
+
+    @Transient
+    private Integer cantidadPostores;
+
+    @Transient
+    private Integer itemActual;
+
     public Subasta() {}
 
     // Getters y Setters
@@ -53,4 +62,10 @@ public class Subasta {
     public void setUbicacion(String ubicacion) { this.ubicacion = ubicacion; }
     public Catalogo getCatalogo() { return catalogo; }
     public void setCatalogo(Catalogo catalogo) { this.catalogo = catalogo; }
+    public Double getMejorOferta() { return mejorOferta; }
+    public void setMejorOferta(Double mejorOferta) { this.mejorOferta = mejorOferta; }
+    public Integer getCantidadPostores() { return cantidadPostores; }
+    public void setCantidadPostores(Integer cantidadPostores) { this.cantidadPostores = cantidadPostores; }
+    public Integer getItemActual() { return itemActual; }
+    public void setItemActual(Integer itemActual) { this.itemActual = itemActual; }
 }

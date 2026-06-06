@@ -3,6 +3,8 @@ package com.grupo6.subastar.model;
 import jakarta.persistence.*;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 @Entity
 @Table(name = "productos")
 public class Producto {
@@ -20,6 +22,10 @@ public class Producto {
 
     @Column(name = "duenio", nullable = false)
     private Integer duenio; // FK a personas/clientes
+
+    @Transient
+    @JsonProperty("nombreDuenioReal")
+    private String nombreDuenioReal;
 
     @Column(name = "nombreArtista")
     private String artista;
@@ -52,4 +58,8 @@ public class Producto {
     public void setHistoria(String historia) { this.historia = historia; }
     public List<Foto> getFotos() { return fotos; }
     public void setFotos(List<Foto> fotos) { this.fotos = fotos; }
+    
+    @JsonProperty("nombreDuenioReal")
+    public String getNombreDuenioReal() { return nombreDuenioReal; }
+    public void setNombreDuenioReal(String nombreDuenioReal) { this.nombreDuenioReal = nombreDuenioReal; }
 }

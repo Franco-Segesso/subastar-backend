@@ -37,6 +37,10 @@ public class AuthService {
             throw new Exception("El email ya está registrado.");
         }
 
+        if (personaRepository.existsByDocumento(req.getDocumento())) {
+            throw new Exception("El documento de identidad ya se encuentra registrado.");
+        }
+
         // 2. Buscar el país en la base de datos ANTES de armar los objetos
         Pais paisReal = paisRepository.findById(req.getNumeroPais())
                 .orElseThrow(() -> new Exception("El país seleccionado no existe en la base de datos"));

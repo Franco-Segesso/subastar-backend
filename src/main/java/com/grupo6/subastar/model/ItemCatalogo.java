@@ -17,7 +17,7 @@ public class ItemCatalogo {
     @JsonIgnore
     private Catalogo catalogo;
 
-    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @ManyToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JoinColumn(name = "producto", referencedColumnName = "identificador")
     private Producto producto;
 
