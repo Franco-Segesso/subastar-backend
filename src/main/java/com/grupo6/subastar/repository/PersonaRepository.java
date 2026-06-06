@@ -14,4 +14,6 @@ public interface PersonaRepository extends JpaRepository<Persona, Integer> {
     
     // NUEVA LÍNEA: Validar por documento
     boolean existsByDocumento(String documento);
+
+    
 }
