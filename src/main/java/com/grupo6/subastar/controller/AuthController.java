@@ -92,6 +92,9 @@ public class AuthController {
             dto.setEmail(cliente.getPersona().getEmail());
             dto.setCategoria(cliente.getCategoria());
             dto.setAdmitido(cliente.getAdmitido());
+            dto.setDocumento(cliente.getPersona().getDocumento());
+            dto.setDireccion(cliente.getPersona().getDireccion());
+            dto.setPais(cliente.getPais() != null ? cliente.getPais().getNombre() : "Sin país");
 
             return ResponseEntity.ok(new LoginResponse(jwt, dto));
 
