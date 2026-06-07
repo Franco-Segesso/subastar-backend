@@ -30,6 +30,9 @@ public class ItemCatalogo {
     @Column(name = "subastado")
     private String subastado;
 
+    @Column(name = "precioFinal")
+    private Double precioFinal;
+
     public ItemCatalogo() {}
 
     // Getters y Setters
@@ -45,4 +48,6 @@ public class ItemCatalogo {
     public void setComision(Double comision) { this.comision = comision; }
     public String getSubastado() { return subastado; }
     public void setSubastado(String subastado) { this.subastado = subastado; }
+    public Double getPrecioFinal() { return precioFinal; }
+    public void setPrecioFinal(Double precioFinal) { this.precioFinal = precioFinal; }
 }

@@ -15,4 +15,8 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, Inte
     Optional<ItemCatalogo> findByIdAndSubastaId(
             @Param("subastaId") Integer subastaId, 
             @Param("itemId") Integer itemId);
+
+    // Cuenta cuántos ítems de una subasta específica tienen un estado particular (ej: "no")
+    @Query("SELECT COUNT(ic) FROM ItemCatalogo ic WHERE ic.catalogo.subasta.id = :subastaId AND ic.subastado = :estado")
+    long countBySubastaIdAndSubastado(@Param("subastaId") Integer subastaId, @Param("estado") String estado);
 }

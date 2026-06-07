@@ -1,6 +1,7 @@
 package com.grupo6.subastar.service;
 
 import com.grupo6.subastar.dto.CierreSubastaDTO;
+import com.grupo6.subastar.dto.PujaMensajeDTO;
 import com.grupo6.subastar.dto.PujaRequest;
 import com.grupo6.subastar.model.*;
 import com.grupo6.subastar.repository.*;
@@ -111,10 +112,18 @@ public class SubastaService {
         
         pujaRepository.save(nuevaPuja);
 
-        // Emitir evento WebSocket
-        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId, nuevaPuja);
+        
 
-        return nuevaPuja; 
+        // ENVÍO LIMPIO POR WEBSOCKET PARA EVITAR BUCLE INFINITO
+        PujaMensajeDTO mensajeLimpio = new PujaMensajeDTO(
+            nuevaPuja.getImporte(), 
+            nuevaPuja.getFechaHora().toString(), 
+            cliente.getIdentificador());
+
+        // Emitir evento WebSocket usando el Map limpio
+        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId, mensajeLimpio);
+
+        return nuevaPuja;
     }
 
     @Transactional
@@ -122,38 +131,51 @@ public class SubastaService {
         ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, itemId)
                 .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));
 
-        // Idempotencia: Si alguien más ya lo cerró (por lag de red llegaron 2 peticiones juntas), no hacemos nada
         if ("si".equalsIgnoreCase(item.getSubastado())) {
             throw new RuntimeException("409: La subasta de este ítem ya fue cerrada previamente");
         }
 
-        // Buscar si hubo alguna puja
         Optional<Puja> pujaGanadoraOpt = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
         
         CierreSubastaDTO respuesta = new CierreSubastaDTO();
         respuesta.setItemId(itemId);
 
         if (pujaGanadoraOpt.isPresent()) {
-            // Hay un ganador
+            // Se vendió
             Puja ganadora = pujaGanadoraOpt.get();
-            ganadora.setGanador("si"); // Marcamos la puja como ganadora en BD
+            ganadora.setGanador("si"); 
             pujaRepository.save(ganadora);
-
-            item.setSubastado("si"); // Marcamos el ítem como subastado
             
+            item.setSubastado("si"); 
+            item.setPrecioFinal(ganadora.getImporte()); // Guardamos el monto final
+
             respuesta.setHayGanador(true);
-            // Obtenemos el ID del cliente ganador navegando las relaciones
             respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
             respuesta.setImporteFinal(ganadora.getImporte());
         } else {
-            // Quedó para la casa (Desierta)
-            item.setSubastado("no"); 
+            // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
+            item.setSubastado("si"); 
+            item.setPrecioFinal(0.0); 
             respuesta.setHayGanador(false);
         }
         
         itemCatalogoRepository.save(item);
 
-        // Emitimos el veredicto final a un sub-tópico de CIERRE
+        // --- NUEVA LÓGICA: CIERRE DE SUBASTA COMPLETA ---
+        // Contamos cuántos ítems de esta subasta todavía dicen subastado = "no"
+        long itemsPendientes = itemCatalogoRepository.countBySubastaIdAndSubastado(subastaId, "no");
+        
+        if (itemsPendientes == 0) {
+            // ¡No quedan más ítems! Cerramos el evento principal
+            Subasta subasta = subastaRepository.findById(subastaId)
+                    .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
+            subasta.setEstado("cerrada"); // Cambia de "abierta" a "cerrada"
+            subastaRepository.save(subasta);
+            
+            // Opcional: Podrías emitir un evento WebSocket extra aquí avisando "Subasta Finalizada"
+        }
+
+        // Emitimos el veredicto del ítem a todos los celulares
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
 
         return respuesta;
