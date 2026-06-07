@@ -134,6 +134,21 @@ public class SubastaService {
         Asistente asistente = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si")
                 .orElseThrow(() -> new RuntimeException("404: El cliente no está conectado a esta subasta"));
         
+        EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
+        if (estadoActivo != null) {
+            ItemCatalogo itemActivo = itemCatalogoRepository.findByIdAndSubastaId(subastaId, estadoActivo.itemId)
+                    .orElse(null);
+            if (itemActivo != null) {
+                Optional<Puja> pujaMaxima = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(itemActivo);
+                if (pujaMaxima.isPresent()) {
+                    Cliente clienteMayorPostor = pujaMaxima.get().getAsistente().getCliente();
+                    if (clienteMayorPostor != null && cliente.getIdentificador().equals(clienteMayorPostor.getIdentificador())) {
+                        throw new RuntimeException("409: No podes salir mientras sos el mayor postor de este item");
+                    }
+                }
+            }
+        }
+
         asistente.setActivo("no");
         asistenteRepository.save(asistente);
     }
