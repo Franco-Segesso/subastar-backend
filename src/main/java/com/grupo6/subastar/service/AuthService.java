@@ -83,6 +83,15 @@ public class AuthService {
 
    @Transactional
     public void activarCuenta(ActivarRequest req) throws Exception {
+        
+        // --- NUEVA VALIDACIÓN DE SEGURIDAD (REGEX) ---
+        // Regla: Mínimo 8 caracteres, 1 número, 1 minúscula, 1 mayúscula, 1 símbolo.
+        String patronPassword = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*._-]).{8,}$";
+        if (!req.getClave().matches(patronPassword)) {
+            throw new Exception("La contraseña debe tener mín. 8 caracteres, una mayúscula, una minúscula, un número y un símbolo especial.");
+        }
+        // ---------------------------------------------
+
         if (!req.getClave().equals(req.getClaveConfirmacion())) {
             throw new Exception("Las claves no coinciden.");
         }
