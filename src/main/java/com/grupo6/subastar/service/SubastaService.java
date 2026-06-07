@@ -2,6 +2,7 @@ package com.grupo6.subastar.service;
 
 import com.grupo6.subastar.dto.CierreSubastaDTO;
 import com.grupo6.subastar.dto.EstadoPujaDTO;
+import com.grupo6.subastar.dto.EstadoSubastaDTO;
 import com.grupo6.subastar.dto.PujaMensajeDTO;
 import com.grupo6.subastar.dto.PujaRequest;
 import com.grupo6.subastar.model.*;
@@ -11,6 +12,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -65,6 +68,7 @@ public class SubastaService {
 
         for (Subasta subasta : subastaRepository.findPendientesParaAbrir(fechaArgentina, horaArgentinaSql)) {
             subastaRepository.actualizarEstado(subasta.getId(), "abierta");
+            emitirEstadoSubasta(subasta.getId(), "abierta");
             System.out.println(">> SUBASTA " + subasta.getId() + " abierta automaticamente a las " + ahora + " (" + ZONA_NEGOCIO + ")");
             activarSiguienteItem(subasta.getId(), ahora);
         }
@@ -277,6 +281,7 @@ public class SubastaService {
             Subasta subasta = subastaRepository.findById(subastaId)
                     .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
             subastaRepository.actualizarEstado(subasta.getId(), "cerrada");
+            emitirEstadoSubasta(subasta.getId(), "cerrada");
             
             // Opcional: Podrías emitir un evento WebSocket extra aquí avisando "Subasta Finalizada"
         }
@@ -299,6 +304,7 @@ public class SubastaService {
         List<ItemCatalogo> pendientes = itemCatalogoRepository.findPendientesBySubastaId(subastaId);
         if (pendientes.isEmpty()) {
             subastaRepository.actualizarEstado(subasta.getId(), "cerrada");
+            emitirEstadoSubasta(subasta.getId(), "cerrada");
             return;
         }
 
@@ -332,6 +338,20 @@ public class SubastaService {
                 estado.importeActual,
                 cerrado);
         messagingTemplate.convertAndSend("/topic/subastas/" + estado.subastaId + "/estado", dto);
+    }
+
+    private void emitirEstadoSubasta(Integer subastaId, String estado) {
+        EstadoSubastaDTO dto = new EstadoSubastaDTO(subastaId, estado);
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    messagingTemplate.convertAndSend("/topic/subastas/estado-general", dto);
+                }
+            });
+        } else {
+            messagingTemplate.convertAndSend("/topic/subastas/estado-general", dto);
+        }
     }
 
     private LocalDateTime ahoraNegocio() {
