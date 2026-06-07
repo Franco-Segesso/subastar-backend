@@ -20,8 +20,7 @@ public abstract class MedioPago {
     @Column(name = "tipo", length = 20, nullable = false)
     private String tipo;
 
-    @Column(name = "verificado", length = 2)
-    private String verificado = "no";
+
 
     @Column(name = "activo", length = 2)
     private String activo = "si";
@@ -35,8 +34,6 @@ public abstract class MedioPago {
     public void setCliente(Cliente cliente) { this.cliente = cliente; }
     public String getTipo() { return tipo; }
     public void setTipo(String tipo) { this.tipo = tipo; }
-    public String getVerificado() { return verificado; }
-    public void setVerificado(String verificado) { this.verificado = verificado; }
     public String getActivo() { return activo; }
     public void setActivo(String activo) { this.activo = activo; }
     public LocalDate getFechaAlta() { return fechaAlta; }
