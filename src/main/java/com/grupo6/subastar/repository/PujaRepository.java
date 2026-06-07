@@ -7,6 +7,7 @@ import com.grupo6.subastar.model.Puja;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import java.util.List;
 import java.util.Optional;
 
 public interface PujaRepository extends JpaRepository<Puja, Integer> {
@@ -21,4 +22,6 @@ public interface PujaRepository extends JpaRepository<Puja, Integer> {
 
     // Recupera la puja más alta para un ítem en particular
     Optional<Puja> findTopByItemCatalogoOrderByImporteDesc(ItemCatalogo item);
+
+    List<Puja> findByItemCatalogoOrderByFechaHoraDesc(ItemCatalogo item);
 }

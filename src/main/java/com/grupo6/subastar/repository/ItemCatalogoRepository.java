@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -17,6 +18,11 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, Inte
             @Param("itemId") Integer itemId);
 
     // Cuenta cuántos ítems de una subasta específica tienen un estado particular (ej: "no")
-    @Query("SELECT COUNT(ic) FROM ItemCatalogo ic WHERE ic.catalogo.subasta.id = :subastaId AND ic.subastado = :estado")
-    long countBySubastaIdAndSubastado(@Param("subastaId") Integer subastaId, @Param("estado") String estado);
+    @Query("SELECT COUNT(ic) FROM ItemCatalogo ic WHERE ic.catalogo.subasta.id = :subastaId AND " +
+            "(ic.subastado IS NULL OR LOWER(TRIM(ic.subastado)) IN ('no', 'false', 'pendiente'))")
+    long countPendientesBySubastaId(@Param("subastaId") Integer subastaId);
+
+    @Query("SELECT ic FROM ItemCatalogo ic WHERE ic.catalogo.subasta.id = :subastaId AND " +
+            "(ic.subastado IS NULL OR LOWER(TRIM(ic.subastado)) IN ('no', 'false', 'pendiente')) ORDER BY ic.id ASC")
+    List<ItemCatalogo> findPendientesBySubastaId(@Param("subastaId") Integer subastaId);
 }

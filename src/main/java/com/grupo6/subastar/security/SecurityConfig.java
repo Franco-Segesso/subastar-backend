@@ -56,7 +56,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> 
                 auth.requestMatchers("/auth/**").permitAll() // Le sacamos el /v1
                     .requestMatchers("/paises").permitAll()  // Le sacamos el /v1
-                    .requestMatchers(HttpMethod.GET, "/subastas/**").permitAll() // Le sacamos el /v1
+                    .requestMatchers(HttpMethod.GET, "/subastas", "/subastas/*", "/subastas/*/items/*").permitAll()
                     .requestMatchers("/subastar-ws/**").permitAll() // WebSocket de subasta
                     .anyRequest().authenticated()              
             );

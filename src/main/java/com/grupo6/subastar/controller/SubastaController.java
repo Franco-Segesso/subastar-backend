@@ -185,15 +185,26 @@ public class SubastaController {
         }
     }
 
+    // 7. GET /subastas/{id}/pujas/{itemId}
+    @GetMapping("/{id}/pujas/{itemId}")
+    public ResponseEntity<?> listarPujasItem(
+            @PathVariable Integer id,
+            @PathVariable Integer itemId,
+            @RequestHeader(value = "Authorization") String token) {
+        try {
+            return ResponseEntity.ok(subastaService.listarPujasItem(id, itemId));
+        } catch (RuntimeException e) {
+            return manejarExcepciones(e);
+        }
+    }
 
-    // 7. POST /subastas/{id}/items/{itemId}/cerrar
+    // Operacion controlada por backend/rematador, no disparada desde el cliente Android.
     @PostMapping("/{id}/items/{itemId}/cerrar")
     public ResponseEntity<?> cerrarSubasta(
             @PathVariable Integer id,
             @PathVariable Integer itemId,
             @RequestHeader(value = "Authorization") String token) {
         try {
-            // Cualquier cliente autenticado en la sala cuyo reloj llegue a 0 puede gatillar esto
             com.grupo6.subastar.dto.CierreSubastaDTO response = subastaService.cerrarSubastaItem(id, itemId);
             return ResponseEntity.ok(response); // 200 OK
         } catch (RuntimeException e) {
@@ -209,6 +220,7 @@ public class SubastaController {
         if (msg.startsWith("403")) return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(msg);
         if (msg.startsWith("404")) return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(msg);
         if (msg.startsWith("409")) return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(msg);
+        if (msg.startsWith("422")) return ResponseEntity.status(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY).body(msg);
         return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body("500: Error interno del servidor");
     }
 }

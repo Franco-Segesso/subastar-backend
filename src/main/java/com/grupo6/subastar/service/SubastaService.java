@@ -1,16 +1,26 @@
 package com.grupo6.subastar.service;
 
 import com.grupo6.subastar.dto.CierreSubastaDTO;
+import com.grupo6.subastar.dto.EstadoPujaDTO;
 import com.grupo6.subastar.dto.PujaMensajeDTO;
 import com.grupo6.subastar.dto.PujaRequest;
 import com.grupo6.subastar.model.*;
 import com.grupo6.subastar.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class SubastaService {
@@ -28,6 +38,50 @@ public class SubastaService {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
+    private static final long DURACION_ITEM_SEGUNDOS = 60;
+    private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
+    private final Map<Integer, EstadoItemActivo> itemsActivos = new ConcurrentHashMap<>();
+
+    @Scheduled(fixedDelay = 1000)
+    @Transactional
+    public synchronized void procesarRelojSubastas() {
+        LocalDateTime ahora = ahoraNegocio();
+        String fechaArgentina = ahora.toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalTime horaArgentina = ahora.toLocalTime();
+        String horaArgentinaSql = horaArgentina.truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_LOCAL_TIME);
+
+        for (EstadoItemActivo estado : List.copyOf(itemsActivos.values())) {
+            if (!estado.cerrando && !estado.deadline.isAfter(ahora)) {
+                estado.cerrando = true;
+                try {
+                    cerrarSubastaItem(estado.subastaId, estado.itemId);
+                    activarSiguienteItem(estado.subastaId, ahoraNegocio());
+                } catch (RuntimeException e) {
+                    itemsActivos.remove(estado.subastaId);
+                    System.err.println(">> ERROR cerrando item " + estado.itemId + " de subasta " + estado.subastaId + ": " + e.getMessage());
+                }
+            }
+        }
+
+        for (Subasta subasta : subastaRepository.findPendientesParaAbrir(fechaArgentina, horaArgentinaSql)) {
+            subastaRepository.actualizarEstado(subasta.getId(), "abierta");
+            System.out.println(">> SUBASTA " + subasta.getId() + " abierta automaticamente a las " + ahora + " (" + ZONA_NEGOCIO + ")");
+            activarSiguienteItem(subasta.getId(), ahora);
+        }
+
+        for (Subasta subasta : subastaRepository.findAll()) {
+            if ("abierta".equals(normalizar(subasta.getEstado())) && !itemsActivos.containsKey(subasta.getId())) {
+                activarSiguienteItem(subasta.getId(), ahora);
+            }
+        }
+
+        for (EstadoItemActivo estado : List.copyOf(itemsActivos.values())) {
+            if (!estado.cerrando) {
+                emitirEstado(estado, ahora, false);
+            }
+        }
+    }
+
     @Transactional
     public void ingresarSala(Integer subastaId, String emailUsuario) {
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario)
@@ -36,12 +90,21 @@ public class SubastaService {
         Subasta subasta = subastaRepository.findById(subastaId)
                 .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
 
+        if (!"abierta".equals(normalizar(subasta.getEstado()))) {
+            throw new RuntimeException("409: Subasta cerrada");
+        }
 
         int pesoCliente = obtenerPesoCategoria(cliente.getCategoria());
         int pesoSubasta = obtenerPesoCategoria(subasta.getCategoria());
 
         if (pesoCliente < pesoSubasta) {
             throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
+        }
+
+        Optional<Asistente> asistenteActual = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si");
+        if (asistenteActual.isPresent()) {
+            emitirEstadoActual(subastaId);
+            return;
         }
 
         // Regla: Control de concurrencia
@@ -53,11 +116,12 @@ public class SubastaService {
         nuevoAsistente.setCliente(cliente);
         nuevoAsistente.setSubasta(subasta);
         nuevoAsistente.setActivo("si");
-        nuevoAsistente.setFechaIngreso(LocalDateTime.now());
+        nuevoAsistente.setFechaIngreso(ahoraNegocio());
         // Simulación temporal de asignación de paleta/número postor
         nuevoAsistente.setNumeroPostor((int) (Math.random() * 1000));
         
         asistenteRepository.save(nuevoAsistente);
+        emitirEstadoActual(subastaId);
     }
 
     @Transactional
@@ -71,12 +135,42 @@ public class SubastaService {
     }
 
     @Transactional
-    public Object procesarPuja(Integer subastaId, PujaRequest request, String emailUsuario) {
+    public synchronized PujaMensajeDTO procesarPuja(Integer subastaId, PujaRequest request, String emailUsuario) {
+        if (request == null || request.getItemId() == null || request.getImporte() == null) {
+            throw new RuntimeException("400: Debe indicar itemId e importe");
+        }
+
+        EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
+        if (estadoActivo == null) {
+            Subasta subasta = subastaRepository.findById(subastaId)
+                    .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
+            if (!"abierta".equals(normalizar(subasta.getEstado()))) {
+                throw new RuntimeException("409: Subasta cerrada o pendiente");
+            }
+            activarSiguienteItem(subastaId, ahoraNegocio());
+            estadoActivo = itemsActivos.get(subastaId);
+        }
+
+        if (estadoActivo == null || !request.getItemId().equals(estadoActivo.itemId)) {
+            throw new RuntimeException("422: El item no es el item activo de la subasta");
+        }
+
+        LocalDateTime ahoraPuja = ahoraNegocio();
+        if (!estadoActivo.deadline.isAfter(ahoraPuja)) {
+            estadoActivo.cerrando = true;
+            cerrarSubastaItem(subastaId, estadoActivo.itemId);
+            activarSiguienteItem(subastaId, ahoraNegocio());
+            throw new RuntimeException("422: El item ya finalizo");
+        }
+
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario).orElseThrow();
         
         ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, request.getItemId())
                 .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));
-                
+        if ("si".equals(normalizar(item.getSubastado()))) {
+            throw new RuntimeException("422: El item ya fue subastado");
+        }
+
         Asistente asistente = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si")
                 .orElseThrow(() -> new RuntimeException("403: Modo observador o no ingresado en sala"));
 
@@ -107,7 +201,7 @@ public class SubastaService {
         nuevaPuja.setAsistente(asistente);
         nuevaPuja.setItemCatalogo(item); // Tu entidad usa setItemCatalogo
         nuevaPuja.setImporte(request.getImporte());
-        nuevaPuja.setFechaHora(LocalDateTime.now());
+        nuevaPuja.setFechaHora(ahoraNegocio());
         nuevaPuja.setGanador("no");
         
         pujaRepository.save(nuevaPuja);
@@ -115,23 +209,35 @@ public class SubastaService {
         
 
         // ENVÍO LIMPIO POR WEBSOCKET PARA EVITAR BUCLE INFINITO
-        PujaMensajeDTO mensajeLimpio = new PujaMensajeDTO(
-            nuevaPuja.getImporte(), 
-            nuevaPuja.getFechaHora().toString(), 
-            cliente.getIdentificador());
+        PujaMensajeDTO mensajeLimpio = convertirPujaADto(nuevaPuja);
 
         // Emitir evento WebSocket usando el Map limpio
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId, mensajeLimpio);
 
-        return nuevaPuja;
+        estadoActivo.deadline = ahoraNegocio().plusSeconds(DURACION_ITEM_SEGUNDOS);
+        estadoActivo.importeActual = nuevaPuja.getImporte();
+        emitirEstado(estadoActivo, ahoraNegocio(), false);
+
+        return mensajeLimpio;
+    }
+
+    @Transactional(readOnly = true)
+    public List<PujaMensajeDTO> listarPujasItem(Integer subastaId, Integer itemId) {
+        ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, itemId)
+                .orElseThrow(() -> new RuntimeException("404: Item no encontrado o no pertenece a la subasta"));
+
+        return pujaRepository.findByItemCatalogoOrderByFechaHoraDesc(item)
+                .stream()
+                .map(this::convertirPujaADto)
+                .collect(Collectors.toList());
     }
 
     @Transactional
-    public CierreSubastaDTO cerrarSubastaItem(Integer subastaId, Integer itemId) {
+    public synchronized CierreSubastaDTO cerrarSubastaItem(Integer subastaId, Integer itemId) {
         ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, itemId)
                 .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));
 
-        if ("si".equalsIgnoreCase(item.getSubastado())) {
+        if ("si".equals(normalizar(item.getSubastado()))) {
             throw new RuntimeException("409: La subasta de este ítem ya fue cerrada previamente");
         }
 
@@ -155,30 +261,85 @@ public class SubastaService {
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
             item.setSubastado("si"); 
-            item.setPrecioFinal(0.0); 
+            item.setPrecioFinal(item.getPrecioBase()); 
             respuesta.setHayGanador(false);
+            respuesta.setImporteFinal(item.getPrecioBase());
         }
         
-        itemCatalogoRepository.save(item);
+        itemCatalogoRepository.saveAndFlush(item);
 
         // --- NUEVA LÓGICA: CIERRE DE SUBASTA COMPLETA ---
         // Contamos cuántos ítems de esta subasta todavía dicen subastado = "no"
-        long itemsPendientes = itemCatalogoRepository.countBySubastaIdAndSubastado(subastaId, "no");
+        long itemsPendientes = itemCatalogoRepository.countPendientesBySubastaId(subastaId);
         
         if (itemsPendientes == 0) {
             // ¡No quedan más ítems! Cerramos el evento principal
             Subasta subasta = subastaRepository.findById(subastaId)
                     .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
-            subasta.setEstado("cerrada"); // Cambia de "abierta" a "cerrada"
-            subastaRepository.save(subasta);
+            subastaRepository.actualizarEstado(subasta.getId(), "cerrada");
             
             // Opcional: Podrías emitir un evento WebSocket extra aquí avisando "Subasta Finalizada"
         }
 
         // Emitimos el veredicto del ítem a todos los celulares
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
+        itemsActivos.remove(subastaId);
+        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/estado",
+                new EstadoPujaDTO(subastaId, itemId, 0, respuesta.getImporteFinal(), true));
 
         return respuesta;
+    }
+
+    private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {
+        if (itemsActivos.containsKey(subastaId)) return;
+
+        Subasta subasta = subastaRepository.findById(subastaId).orElse(null);
+        if (subasta == null || !"abierta".equals(normalizar(subasta.getEstado()))) return;
+
+        List<ItemCatalogo> pendientes = itemCatalogoRepository.findPendientesBySubastaId(subastaId);
+        if (pendientes.isEmpty()) {
+            subastaRepository.actualizarEstado(subasta.getId(), "cerrada");
+            return;
+        }
+
+        ItemCatalogo item = pendientes.get(0);
+        Double importeActual = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item)
+                .map(Puja::getImporte)
+                .orElse(item.getPrecioBase());
+        EstadoItemActivo estado = new EstadoItemActivo(
+                subastaId,
+                item.getId(),
+                ahora.plusSeconds(DURACION_ITEM_SEGUNDOS),
+                importeActual);
+        itemsActivos.put(subastaId, estado);
+        emitirEstado(estado, ahora, false);
+    }
+
+    private void emitirEstadoActual(Integer subastaId) {
+        EstadoItemActivo estado = itemsActivos.get(subastaId);
+        if (estado != null) {
+            emitirEstado(estado, ahoraNegocio(), false);
+        }
+    }
+
+    private void emitirEstado(EstadoItemActivo estado, LocalDateTime ahora, boolean cerrado) {
+        long millisRestantes = Math.max(0, ChronoUnit.MILLIS.between(ahora, estado.deadline));
+        long restante = (millisRestantes + 999) / 1000;
+        EstadoPujaDTO dto = new EstadoPujaDTO(
+                estado.subastaId,
+                estado.itemId,
+                (int) restante,
+                estado.importeActual,
+                cerrado);
+        messagingTemplate.convertAndSend("/topic/subastas/" + estado.subastaId + "/estado", dto);
+    }
+
+    private LocalDateTime ahoraNegocio() {
+        return LocalDateTime.now(ZONA_NEGOCIO);
+    }
+
+    private String normalizar(String valor) {
+        return valor == null ? "" : valor.trim().toLowerCase();
     }
 
     private int obtenerPesoCategoria(String categoria) {
@@ -189,6 +350,31 @@ public class SubastaService {
             case "plata": return 3;
             case "especial": return 2;
             case "comun": default: return 1;
+        }
+    }
+
+    private PujaMensajeDTO convertirPujaADto(Puja puja) {
+        Cliente cliente = puja.getAsistente().getCliente();
+        Persona persona = cliente.getPersona();
+        String fechaHora = puja.getFechaHora() != null ? puja.getFechaHora().toString() : null;
+        String nombre = persona != null ? persona.getNombre() : null;
+        String apellido = persona != null ? persona.getApellido() : null;
+        return new PujaMensajeDTO(puja.getItemCatalogo().getId(), puja.getImporte(), fechaHora, cliente.getIdentificador(), nombre, apellido);
+    }
+
+    private static class EstadoItemActivo {
+        private final Integer subastaId;
+        private final Integer itemId;
+        private LocalDateTime deadline;
+        private Double importeActual;
+        private boolean cerrando;
+
+        private EstadoItemActivo(Integer subastaId, Integer itemId, LocalDateTime deadline, Double importeActual) {
+            this.subastaId = subastaId;
+            this.itemId = itemId;
+            this.deadline = deadline;
+            this.importeActual = importeActual;
+            this.cerrando = false;
         }
     }
 }
