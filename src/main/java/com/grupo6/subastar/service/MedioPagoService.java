@@ -40,6 +40,21 @@ public class MedioPagoService {
         Cliente cliente = clienteRepository.findById(clienteId)
                 .orElseThrow(() -> new Exception("Cliente no encontrado con id: " + clienteId));
 
+        
+        List<MedioPago> activos = medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si");
+        for (MedioPago m : activos) {
+            if (m instanceof TarjetaCredito) {
+                TarjetaCredito tc = (TarjetaCredito) m;
+                boolean mismosDigitos = tc.getUltimosDigitos().equals(req.getUltimosDigitos());
+                boolean mismoVencimiento = tc.getVencimiento().equals(req.getVencimiento());
+                boolean mismoTitular = tc.getTitular().equalsIgnoreCase(req.getTitular());
+                
+                if (mismosDigitos && mismoVencimiento && mismoTitular) {
+                    throw new Exception("Esta tarjeta de crédito ya se encuentra registrada en tu cuenta.");
+                }
+            }
+        }
+
         TarjetaCredito tarjeta = new TarjetaCredito();
         tarjeta.setCliente(cliente);
         tarjeta.setActivo("si");
@@ -57,6 +72,17 @@ public class MedioPagoService {
     public MedioPago agregarCuenta(Integer clienteId, AgregarCuentaRequest req) throws Exception {
         Cliente cliente = clienteRepository.findById(clienteId)
                 .orElseThrow(() -> new Exception("Cliente no encontrado con id: " + clienteId));
+
+
+        List<MedioPago> activos = medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si");
+        for (MedioPago m : activos) {
+            if (m instanceof CuentaBancaria) {
+                CuentaBancaria cb = (CuentaBancaria) m;
+                if (cb.getCbuIban().equals(req.getCbuIban())) {
+                    throw new Exception("Ya tenés una cuenta registrada con el CBU/IBAN: " + req.getCbuIban());
+                }
+            }
+        }
 
         CuentaBancaria cuenta = new CuentaBancaria();
         cuenta.setCliente(cliente);
@@ -76,6 +102,17 @@ public class MedioPagoService {
     public MedioPago agregarCheque(Integer clienteId, AgregarChequeRequest req) throws Exception {
         Cliente cliente = clienteRepository.findById(clienteId)
                 .orElseThrow(() -> new Exception("Cliente no encontrado con id: " + clienteId));
+
+
+        List<MedioPago> activos = medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si");
+        for (MedioPago m : activos) {
+            if (m instanceof ChequeCertificado) {
+                ChequeCertificado cc = (ChequeCertificado) m;
+                if (cc.getNroCheque().equals(req.getNroCheque())) {
+                    throw new Exception("Ya tenés registrado un cheque con el número: " + req.getNroCheque());
+                }
+            }
+        }
 
         ChequeCertificado cheque = new ChequeCertificado();
         cheque.setCliente(cliente);
