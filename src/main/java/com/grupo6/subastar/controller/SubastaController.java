@@ -185,6 +185,23 @@ public class SubastaController {
         }
     }
 
+
+    // 7. POST /subastas/{id}/items/{itemId}/cerrar
+    @PostMapping("/{id}/items/{itemId}/cerrar")
+    public ResponseEntity<?> cerrarSubasta(
+            @PathVariable Integer id,
+            @PathVariable Integer itemId,
+            @RequestHeader(value = "Authorization") String token) {
+        try {
+            // Cualquier cliente autenticado en la sala cuyo reloj llegue a 0 puede gatillar esto
+            com.grupo6.subastar.dto.CierreSubastaDTO response = subastaService.cerrarSubastaItem(id, itemId);
+            return ResponseEntity.ok(response); // 200 OK
+        } catch (RuntimeException e) {
+            return manejarExcepciones(e);
+        }
+    }
+    
+
     // Helper para parsear tus excepciones a los HTTP Status exactos de la consigna
     private ResponseEntity<?> manejarExcepciones(RuntimeException e) {
         String msg = e.getMessage();

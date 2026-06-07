@@ -1,5 +1,6 @@
 package com.grupo6.subastar.service;
 
+import com.grupo6.subastar.dto.CierreSubastaDTO;
 import com.grupo6.subastar.dto.PujaRequest;
 import com.grupo6.subastar.model.*;
 import com.grupo6.subastar.repository.*;
@@ -114,6 +115,48 @@ public class SubastaService {
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId, nuevaPuja);
 
         return nuevaPuja; 
+    }
+
+    @Transactional
+    public CierreSubastaDTO cerrarSubastaItem(Integer subastaId, Integer itemId) {
+        ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, itemId)
+                .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));
+
+        // Idempotencia: Si alguien más ya lo cerró (por lag de red llegaron 2 peticiones juntas), no hacemos nada
+        if ("si".equalsIgnoreCase(item.getSubastado())) {
+            throw new RuntimeException("409: La subasta de este ítem ya fue cerrada previamente");
+        }
+
+        // Buscar si hubo alguna puja
+        Optional<Puja> pujaGanadoraOpt = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
+        
+        CierreSubastaDTO respuesta = new CierreSubastaDTO();
+        respuesta.setItemId(itemId);
+
+        if (pujaGanadoraOpt.isPresent()) {
+            // Hay un ganador
+            Puja ganadora = pujaGanadoraOpt.get();
+            ganadora.setGanador("si"); // Marcamos la puja como ganadora en BD
+            pujaRepository.save(ganadora);
+
+            item.setSubastado("si"); // Marcamos el ítem como subastado
+            
+            respuesta.setHayGanador(true);
+            // Obtenemos el ID del cliente ganador navegando las relaciones
+            respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
+            respuesta.setImporteFinal(ganadora.getImporte());
+        } else {
+            // Quedó para la casa (Desierta)
+            item.setSubastado("no"); 
+            respuesta.setHayGanador(false);
+        }
+        
+        itemCatalogoRepository.save(item);
+
+        // Emitimos el veredicto final a un sub-tópico de CIERRE
+        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
+
+        return respuesta;
     }
 
     private int obtenerPesoCategoria(String categoria) {
