@@ -111,7 +111,7 @@ public class SubastaService {
             return;
         }
 
-        // Regla: Control de concurrencia
+        
         if (asistenteRepository.existsByClienteAndActivo(cliente, "si")) {
             throw new RuntimeException("400: El usuario ya está conectado en otra subasta");
         }
@@ -121,7 +121,7 @@ public class SubastaService {
         nuevoAsistente.setSubasta(subasta);
         nuevoAsistente.setActivo("si");
         nuevoAsistente.setFechaIngreso(ahoraNegocio());
-        // Simulación temporal de asignación de paleta/número postor
+        
         nuevoAsistente.setNumeroPostor((int) (Math.random() * 1000));
         
         asistenteRepository.save(nuevoAsistente);
@@ -197,7 +197,7 @@ public class SubastaService {
         Optional<Puja> pujaMaximaOpt = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
         Double valorReferencia = pujaMaximaOpt.isPresent() ? pujaMaximaOpt.get().getImporte() : item.getPrecioBase();
         
-        // Reglas de cátedra: Mínimo = Mejor valor actual + 1% del VALOR BASE
+        // Mínimo = Mejor valor actual + 1% del VALOR BASE
         // Máximo = Mejor valor actual + 20% del VALOR BASE
         Double limiteMinimo = valorReferencia + (item.getPrecioBase() * 0.01);
         Double limiteMaximo = valorReferencia + (item.getPrecioBase() * 0.20);
@@ -207,7 +207,7 @@ public class SubastaService {
         }
 
         String cat = cliente.getCategoria();
-        if (cat == null) cat = "comun"; // Manejo de fallback por BD
+        if (cat == null) cat = "comun"; 
         
         if (!cat.equalsIgnoreCase("oro") && !cat.equalsIgnoreCase("platino")) {
             if (request.getImporte() > limiteMaximo) {
@@ -287,21 +287,21 @@ public class SubastaService {
         
         itemCatalogoRepository.saveAndFlush(item);
 
-        // --- NUEVA LÓGICA: CIERRE DE SUBASTA COMPLETA ---
+        // 
         // Contamos cuántos ítems de esta subasta todavía dicen subastado = "no"
         long itemsPendientes = itemCatalogoRepository.countPendientesBySubastaId(subastaId);
         
         if (itemsPendientes == 0) {
-            // ¡No quedan más ítems! Cerramos el evento principal
+            
             Subasta subasta = subastaRepository.findById(subastaId)
                     .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
             subastaRepository.actualizarEstado(subasta.getId(), "cerrada");
             emitirEstadoSubasta(subasta.getId(), "cerrada");
             
-            // Opcional: Podrías emitir un evento WebSocket extra aquí avisando "Subasta Finalizada"
+            
         }
 
-        // Emitimos el veredicto del ítem a todos los celulares
+        
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
         itemsActivos.remove(subastaId);
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/estado",
@@ -378,7 +378,7 @@ public class SubastaService {
     }
 
     private int obtenerPesoCategoria(String categoria) {
-        if (categoria == null) return 1; // Por defecto asumimos la más baja
+        if (categoria == null) return 1; 
         switch (categoria.toLowerCase()) {
             case "platino": return 5;
             case "oro": return 4;

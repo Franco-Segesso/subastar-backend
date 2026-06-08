@@ -126,7 +126,7 @@ public class MedioPagoService {
         return chequeRepository.save(cheque);
     }
 
-    // DELETE: baja lógica
+    // DELETE
     @Transactional
     public void darDeBaja(Integer medioPagoId) throws Exception {
         MedioPago medio = medioPagoRepository.findById(medioPagoId)

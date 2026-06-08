@@ -18,7 +18,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Le asignamos un rol genérico. A futuro podríamos mapear la "categoria" (plata, oro, etc) aquí.
+        
         return Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
     }
 
@@ -39,8 +39,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isAccountNonLocked() {
-        // Bloqueamos la cuenta si el admitido es explícitamente "no" o "pendiente"
-        // Según el script SQL: admitido in ('si','no','pendiente')
+        
         return "si".equalsIgnoreCase(cliente.getAdmitido());
     }
 
@@ -51,8 +50,7 @@ public class UserDetailsImpl implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        // Bloqueamos la cuenta si el estado es "inactivo"
-        // Según el script SQL: estado in ('activo', 'inactivo')
+        
         return "activo".equalsIgnoreCase(cliente.getPersona().getEstado());
     }
 

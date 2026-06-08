@@ -58,7 +58,7 @@ public class SubastaController {
         }
 
 
-        // Regra de negocio: Si el usuario es invitado (no hay token), se ocultan los precios base de los catálogos
+        // Si el usuario es invitado (no hay token), se ocultan los precios base de los catálogos
         if (token == null || token.isEmpty()) {
             subastas.forEach(s -> {
 
@@ -87,7 +87,7 @@ public class SubastaController {
 
         Subasta subasta = subastaOpt.get();
 
-        // Regla de negocio: Ocultar precios base a usuarios no autenticados
+        // Ocultar precios base a usuarios no autenticados
         if (token == null || token.isEmpty()) {
             if (subasta.getCatalogo() != null && subasta.getCatalogo().getItems() != null) {
                 subasta.getCatalogo().getItems().forEach(item -> item.setPrecioBase(null));
@@ -116,7 +116,7 @@ public class SubastaController {
         asignarNombreDuenio(item.getProducto());
     }
 
-        // Regla de negocio: Ocultar precio base si no se provee token
+        // Ocultar precio base si no se provee token
         if (token == null || token.isEmpty()) {
             item.setPrecioBase(null);
         }
@@ -147,7 +147,7 @@ public class SubastaController {
             @PathVariable Integer id,
             @RequestHeader(value = "Authorization") String token) {
         try {
-            // Spring Security te permite obtener el usuario autenticado (email) del contexto
+            
             String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
             subastaService.ingresarSala(id, email);
             return ResponseEntity.ok().build(); // 200 OK
@@ -164,7 +164,7 @@ public class SubastaController {
         try {
             String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
             subastaService.salirSala(id, email);
-            return ResponseEntity.ok().build(); // 200 OK
+            return ResponseEntity.ok().build(); 
         } catch (RuntimeException e) {
             return manejarExcepciones(e);
         }
@@ -198,7 +198,7 @@ public class SubastaController {
         }
     }
 
-    // Operacion controlada por backend/rematador, no disparada desde el cliente Android.
+    
     @PostMapping("/{id}/items/{itemId}/cerrar")
     public ResponseEntity<?> cerrarSubasta(
             @PathVariable Integer id,
@@ -206,14 +206,14 @@ public class SubastaController {
             @RequestHeader(value = "Authorization") String token) {
         try {
             com.grupo6.subastar.dto.CierreSubastaDTO response = subastaService.cerrarSubastaItem(id, itemId);
-            return ResponseEntity.ok(response); // 200 OK
+            return ResponseEntity.ok(response); 
         } catch (RuntimeException e) {
             return manejarExcepciones(e);
         }
     }
     
 
-    // Helper para parsear tus excepciones a los HTTP Status exactos de la consigna
+    
     private ResponseEntity<?> manejarExcepciones(RuntimeException e) {
         String msg = e.getMessage();
         if (msg.startsWith("400")) return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST).body(msg);

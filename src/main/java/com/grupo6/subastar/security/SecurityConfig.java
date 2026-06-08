@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // CAMBIO CLAVE: Usamos la Interfaz (UserDetailsService) en lugar de la Implementación
+    
     @Autowired
     private UserDetailsService userDetailsService;
 
@@ -32,7 +32,7 @@ public class SecurityConfig {
     @Bean
     
     public DaoAuthenticationProvider authenticationProvider() {
-        // Le pasamos el userDetailsService directamente al constructor como pide el error
+        
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
         
         authProvider.setPasswordEncoder(passwordEncoder());

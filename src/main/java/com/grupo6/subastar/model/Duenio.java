@@ -7,7 +7,7 @@ import jakarta.persistence.*;
 public class Duenio {
 
     @Id
-    // ATENCIÓN: No lleva @GeneratedValue porque el ID ya viene de la persona
+    // No lleva @GeneratedValue porque el ID ya viene de la persona
     @Column(name = "identificador")
     private Integer id;
 

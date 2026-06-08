@@ -48,7 +48,7 @@ public class AuthService {
         Pais paisReal = paisRepository.findById(req.getNumeroPais())
                 .orElseThrow(() -> new Exception("El país seleccionado no existe en la base de datos"));
 
-        // 3. Mapear y guardar la Persona (Padre)
+        // 3. Mapear y guardar la Persona
         Persona p = new Persona();
         p.setNombre(req.getNombre());
         p.setApellido(req.getApellido());
@@ -74,11 +74,11 @@ public class AuthService {
         // 4. Mapear y guardar el Cliente (Hijo)
         Cliente c = new Cliente();
         c.setPersona(p); 
-        c.setPais(paisReal); // ¡ACÁ ESTÁ LA CORRECCIÓN! El país va en el Cliente
+        c.setPais(paisReal); 
         
         c.setAdmitido("no"); 
         c.setCategoria("comun"); 
-        c.setVerificadorId(1); // FK temporal requerida por tu modelo
+        c.setVerificadorId(1); 
         c.setFechaAprobacion(null); 
 
         // Guardamos el Cliente
@@ -88,7 +88,7 @@ public class AuthService {
    @Transactional
     public void activarCuenta(ActivarRequest req) throws Exception {
         
-        // --- NUEVA VALIDACIÓN DE SEGURIDAD (REGEX) ---
+        
         // Regla: Mínimo 8 caracteres, 1 número, 1 minúscula, 1 mayúscula, 1 símbolo.
         String patronPassword = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*._-]).{8,}$";
         if (!req.getClave().matches(patronPassword)) {
@@ -111,7 +111,7 @@ public class AuthService {
             throw new Exception("Cuenta pendiente de aprobación por la empresa.");
         }
 
-        // 2. NUEVA VALIDACIÓN: Si ya tiene clave, es que ya completó el registro
+        // 2. Si ya tiene clave, es que ya completó el registro
         if (c.getClave() != null && !c.getClave().isEmpty()) {
             throw new Exception("El usuario ya ha completado su registro anteriormente.");
         }

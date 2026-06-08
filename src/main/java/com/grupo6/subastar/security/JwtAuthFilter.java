@@ -37,7 +37,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                // Establecemos el usuario en el contexto de seguridad actual
+                
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception e) {
@@ -51,7 +51,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String headerAuth = request.getHeader("Authorization");
 
         if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
-            return headerAuth.substring(7); // Quitamos "Bearer " (7 caracteres)
+            return headerAuth.substring(7); 
         }
         return null;
     }

@@ -73,7 +73,7 @@ public class MedioPagoController {
     }
 
     // DELETE /v1/medios-pago/{id}
-    // Baja lógica: pone activo = 'no'
+   
     @DeleteMapping("/{id}")
     public ResponseEntity<?> darDeBaja(@PathVariable Integer id) {
         try {

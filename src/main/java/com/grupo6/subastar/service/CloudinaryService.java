@@ -17,7 +17,7 @@ public class CloudinaryService {
 
     public String subirImagen(MultipartFile archivo) throws IOException {
         if (archivo == null || archivo.isEmpty()) {
-            return null; // O podés lanzar una excepción si la foto es obligatoria
+            return null; 
         }
         
         // Sube el archivo a Cloudinary

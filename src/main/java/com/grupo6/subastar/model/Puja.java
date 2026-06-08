@@ -20,15 +20,15 @@ public class Puja {
     @Column(name = "importe", nullable = false)
     private Double importe;
 
-    @Column(name = "fechaHora") // Nombre real en tu DB
+    @Column(name = "fechaHora") 
     private LocalDateTime fechaHora;
 
-    // Relación con el Ítem del Catálogo (La columna clave de tu foto)
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "item", referencedColumnName = "identificador")
     private ItemCatalogo itemCatalogo;
 
-    // Relación con el Cliente
+    
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "asistente", referencedColumnName = "identificador")
     private Asistente asistente;

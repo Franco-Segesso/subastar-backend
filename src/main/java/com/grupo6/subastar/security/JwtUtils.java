@@ -11,8 +11,7 @@ import java.util.Date;
 @Component
 public class JwtUtils {
 
-    // Clave secreta (en producción debería ir en application.properties o variables de entorno)
-    // Debe ser de al menos 256 bits (32 caracteres)
+    
     private final String jwtSecret = "SubastarAppSecretKeyParaFirmaDeTokens2026";
     
     // Tiempo de expiración del token (ej: 24 horas)

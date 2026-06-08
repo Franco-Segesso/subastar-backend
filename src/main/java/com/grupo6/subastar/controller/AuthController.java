@@ -115,7 +115,7 @@ public class AuthController {
     public ResponseEntity<?> activar(@RequestBody ActivarRequest request) {
         try {
             authService.activarCuenta(request);
-            // El documento exige devolver un token y un mensaje
+            
             return ResponseEntity.ok().body("{\"token\": \"token_generado_aqui\", \"mensaje\": \"Cuenta activada. Ya podés iniciar sesión.\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");
