@@ -17,7 +17,7 @@ public class Foto {
     @JsonIgnore
     private Producto producto;
 
-    @Column(name = "foto", nullable = false)
+    @Column(name = "foto", nullable = false, length = 500)
     private String urlFoto;
 
     public Foto() {}

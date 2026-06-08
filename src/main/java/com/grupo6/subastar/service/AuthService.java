@@ -18,6 +18,9 @@ import org.springframework.web.multipart.MultipartFile;
 public class AuthService {
 
     @Autowired
+    private CloudinaryService cloudinaryService;
+
+    @Autowired
     private PersonaRepository personaRepository;
 
     @Autowired
@@ -55,12 +58,13 @@ public class AuthService {
         p.setFechaNacimiento(req.getFechaNacimiento());
         p.setEstado("activo"); 
 
-        // Convertimos las fotos a bytes si vienen en la petición
         if (fotoFrente != null && !fotoFrente.isEmpty()) {
-            p.setFotoFrente(fotoFrente.getBytes());
+            String urlFrente = cloudinaryService.subirImagen(fotoFrente);
+            p.setFotoFrente(urlFrente);
         }
         if (fotoDorso != null && !fotoDorso.isEmpty()) {
-            p.setFotoDorso(fotoDorso.getBytes());
+            String urlDorso = cloudinaryService.subirImagen(fotoDorso);
+            p.setFotoDorso(urlDorso);
         }
 
         // Guardamos la Persona primero para que se le genere el Identificador (ID)
