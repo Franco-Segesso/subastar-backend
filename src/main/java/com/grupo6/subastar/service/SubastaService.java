@@ -40,6 +40,8 @@ public class SubastaService {
     private AsistenteRepository asistenteRepository;
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
+    @Autowired
+    private RegistroSubastaRepository registroSubastaRepository;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -273,6 +275,7 @@ public class SubastaService {
             
             item.setSubastado("si"); 
             item.setPrecioFinal(ganadora.getImporte()); // Guardamos el monto final
+            registrarCompraSiNoExiste(subastaId, item, ganadora);
 
             respuesta.setHayGanador(true);
             respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
@@ -308,6 +311,44 @@ public class SubastaService {
                 new EstadoPujaDTO(subastaId, itemId, 0, respuesta.getImporteFinal(), true));
 
         return respuesta;
+    }
+
+    private void registrarCompraSiNoExiste(
+            Integer subastaId,
+            ItemCatalogo item,
+            Puja ganadora) {
+        Producto producto = item.getProducto();
+        Cliente cliente = ganadora.getAsistente().getCliente();
+        if (producto == null || producto.getId() == null || cliente == null) {
+            throw new RuntimeException("500: No se pudo registrar la compra ganadora");
+        }
+
+        boolean yaRegistrada = registroSubastaRepository
+                .findFirstBySubastaIdAndProductoIdAndClienteId(
+                        subastaId,
+                        producto.getId(),
+                        cliente.getIdentificador())
+                .isPresent();
+        if (yaRegistrada) return;
+
+        RegistroSubasta compra = new RegistroSubasta();
+        compra.setSubastaId(subastaId);
+        compra.setDuenioId(producto.getDuenio());
+        compra.setProductoId(producto.getId());
+        compra.setClienteId(cliente.getIdentificador());
+        compra.setImporte(ganadora.getImporte());
+        compra.setComision(calcularComision(
+                ganadora.getImporte(), item.getComision()));
+        compra.setCostoEnvio(null);
+        compra.setNroPolizaSeguro(producto.getSeguro());
+        compra.setModalidadEntrega("pendiente");
+        registroSubastaRepository.save(compra);
+    }
+
+    private double calcularComision(Double importe, Double porcentaje) {
+        double base = importe == null ? 0.0 : importe;
+        double tasa = porcentaje == null ? 0.0 : porcentaje;
+        return Math.round((base * tasa / 100.0) * 100.0) / 100.0;
     }
 
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {

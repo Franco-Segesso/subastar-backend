@@ -25,4 +25,9 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, Inte
     @Query("SELECT ic FROM ItemCatalogo ic WHERE ic.catalogo.subasta.id = :subastaId AND " +
             "(ic.subastado IS NULL OR LOWER(TRIM(ic.subastado)) IN ('no', 'false', 'pendiente')) ORDER BY ic.id ASC")
     List<ItemCatalogo> findPendientesBySubastaId(@Param("subastaId") Integer subastaId);
+
+    @Query("SELECT i FROM ItemCatalogo i WHERE i.catalogo.subasta.id = :subastaId AND i.producto.id = :productoId")
+    Optional<ItemCatalogo> findBySubastaIdAndProductoId(
+            @Param("subastaId") Integer subastaId,
+            @Param("productoId") Integer productoId);
 }

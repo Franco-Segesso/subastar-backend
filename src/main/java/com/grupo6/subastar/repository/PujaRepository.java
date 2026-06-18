@@ -24,4 +24,25 @@ public interface PujaRepository extends JpaRepository<Puja, Integer> {
     Optional<Puja> findTopByItemCatalogoOrderByImporteDesc(ItemCatalogo item);
 
     List<Puja> findByItemCatalogoOrderByFechaHoraDesc(ItemCatalogo item);
+
+    @Query("SELECT p FROM Puja p " +
+            "JOIN FETCH p.asistente a " +
+            "JOIN FETCH a.cliente c " +
+            "JOIN FETCH c.persona " +
+            "JOIN FETCH a.subasta s " +
+            "JOIN FETCH p.itemCatalogo i " +
+            "JOIN FETCH i.catalogo ca " +
+            "WHERE c.identificador = :clienteId " +
+            "ORDER BY s.fecha DESC, s.hora DESC, p.fechaHora ASC, p.id ASC")
+    List<Puja> findHistorialByClienteId(@Param("clienteId") Integer clienteId);
+
+    @Query("SELECT p FROM Puja p " +
+            "JOIN FETCH p.asistente a " +
+            "JOIN FETCH a.cliente c " +
+            "JOIN FETCH c.persona " +
+            "JOIN FETCH p.itemCatalogo i " +
+            "JOIN FETCH i.catalogo ca " +
+            "WHERE ca.subasta.id = :subastaId " +
+            "ORDER BY p.fechaHora ASC, p.id ASC")
+    List<Puja> findHistorialBySubastaId(@Param("subastaId") Integer subastaId);
 }

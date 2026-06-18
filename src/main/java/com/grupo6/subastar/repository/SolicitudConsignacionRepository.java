@@ -16,4 +16,7 @@ public interface SolicitudConsignacionRepository extends JpaRepository<Solicitud
 
     @Query("SELECT s FROM SolicitudConsignacion s WHERE s.identificador = :id AND s.producto.duenio = :clienteId")
     Optional<SolicitudConsignacion> findByIdAndClienteId(@Param("id") Integer id, @Param("clienteId") Integer clienteId);
+
+    @Query("SELECT COUNT(s) FROM SolicitudConsignacion s WHERE s.producto.duenio = :clienteId")
+    long countByClienteId(@Param("clienteId") Integer clienteId);
 }
