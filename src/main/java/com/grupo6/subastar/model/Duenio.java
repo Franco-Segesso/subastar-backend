@@ -16,6 +16,15 @@ public class Duenio {
     @JoinColumn(name = "identificador", referencedColumnName = "identificador", insertable = false, updatable = false)
     private Persona persona;
 
+    @Column(name = "numeroPais")
+    private Integer numeroPais;
+
+    @Column(name = "calificacionRiesgo")
+    private Integer calificacionRiesgo;
+
+    @Column(name = "verificador", nullable = false)
+    private Integer verificadorId;
+
     public Duenio() {
     }
 
@@ -24,4 +33,13 @@ public class Duenio {
 
     public Persona getPersona() { return persona; }
     public void setPersona(Persona persona) { this.persona = persona; }
+
+    public Integer getNumeroPais() { return numeroPais; }
+    public void setNumeroPais(Integer numeroPais) { this.numeroPais = numeroPais; }
+
+    public Integer getCalificacionRiesgo() { return calificacionRiesgo; }
+    public void setCalificacionRiesgo(Integer calificacionRiesgo) { this.calificacionRiesgo = calificacionRiesgo; }
+
+    public Integer getVerificadorId() { return verificadorId; }
+    public void setVerificadorId(Integer verificadorId) { this.verificadorId = verificadorId; }
 }

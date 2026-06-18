@@ -1,6 +1,7 @@
 package com.grupo6.subastar.model;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -20,8 +21,23 @@ public class Producto {
     @Column(name = "descripcionCompleta", nullable = false)
     private String descripcion;
 
+    @Column(name = "fecha")
+    private LocalDate fecha;
+
+    @Column(name = "disponible")
+    private String disponible;
+
+    @Column(name = "revisor", nullable = false)
+    private Integer revisorId;
+
     @Column(name = "duenio", nullable = false)
     private Integer duenio; // FK a personas/clientes
+
+    @Column(name = "seguro")
+    private String seguro;
+
+    @Column(name = "depositoActual")
+    private Integer depositoActual;
 
     @Transient
     @JsonProperty("nombreDuenioReal")
@@ -48,8 +64,18 @@ public class Producto {
     public void setTipo(String tipo) { this.tipo = tipo; }
     public String getDescripcion() { return descripcion; }
     public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
+    public LocalDate getFecha() { return fecha; }
+    public void setFecha(LocalDate fecha) { this.fecha = fecha; }
+    public String getDisponible() { return disponible; }
+    public void setDisponible(String disponible) { this.disponible = disponible; }
+    public Integer getRevisorId() { return revisorId; }
+    public void setRevisorId(Integer revisorId) { this.revisorId = revisorId; }
     public Integer getDuenio() { return duenio; }
     public void setDuenio(Integer duenio) { this.duenio = duenio; }
+    public String getSeguro() { return seguro; }
+    public void setSeguro(String seguro) { this.seguro = seguro; }
+    public Integer getDepositoActual() { return depositoActual; }
+    public void setDepositoActual(Integer depositoActual) { this.depositoActual = depositoActual; }
     public String getArtista() { return artista; }
     public void setArtista(String artista) { this.artista = artista; }
     public String getFechaCreacion() { return fechaCreacion; }
