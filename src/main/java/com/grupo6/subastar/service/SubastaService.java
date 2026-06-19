@@ -40,6 +40,8 @@ public class SubastaService {
     private AsistenteRepository asistenteRepository;
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
+    @Autowired
+    private NotificacionService notificacionService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -277,6 +279,15 @@ public class SubastaService {
             respuesta.setHayGanador(true);
             respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
             respuesta.setImporteFinal(ganadora.getImporte());
+
+            //Dispara notificación al ganador
+            notificacionService.crearNotificacion(
+                ganadora.getAsistente().getCliente(),
+                "¡Subasta Ganada!",
+                "¡Felicidades! Eres el ganador del ítem #" + itemId + ". Tienes 48hs para abonarlo.",
+                com.grupo6.subastar.model.TipoNotificacion.GANADA,
+                itemId
+            );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
             item.setSubastado("si"); 

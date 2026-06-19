@@ -2,10 +2,13 @@ package com.grupo6.subastar.service;
 
 import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.Notificacion;
+import com.grupo6.subastar.model.TipoNotificacion;
 import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.NotificacionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import com.grupo6.subastar.model.TipoNotificacion;
+import java.time.LocalDateTime;
 
 import java.util.List;
 
@@ -48,9 +51,24 @@ public class NotificacionService {
         notificacionRepository.save(notificacion);
     }
 
+    // Método utilitario para generar notificaciones desde cualquier otro servicio
+    public void crearNotificacion(Cliente cliente, String titulo, String mensaje, TipoNotificacion tipo, Integer referenciaId) {
+        Notificacion nuevaNotif = new Notificacion();
+        nuevaNotif.setCliente(cliente);
+        nuevaNotif.setTitulo(titulo);
+        nuevaNotif.setMensaje(mensaje);
+        nuevaNotif.setTipo(tipo);
+        nuevaNotif.setReferenciaId(referenciaId);
+        nuevaNotif.setLeido(false);
+        nuevaNotif.setFechaEnvio(LocalDateTime.now());
+        
+        notificacionRepository.save(nuevaNotif);
+    }
+
     // Método auxiliar para no repetir código
     private Cliente obtenerClientePorEmail(String email) {
         return clienteRepository.findByPersonaEmail(email)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
     }
+
 }
