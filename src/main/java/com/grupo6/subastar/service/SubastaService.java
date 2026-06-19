@@ -44,6 +44,8 @@ public class SubastaService {
     private RegistroSubastaRepository registroSubastaRepository;
     @Autowired
     private MedioPagoService medioPagoService;
+    @Autowired
+    private NotificacionService notificacionService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -293,6 +295,14 @@ public class SubastaService {
             respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
             respuesta.setImporteFinal(ganadora.getImporte());
             respuesta.setCompraId(compra.getIdentificador());
+
+            notificacionService.crearNotificacion(
+                ganadora.getAsistente().getCliente(),
+                "Subasta ganada",
+                "Felicitaciones. Ganaste el item #" + itemId + ". Tenes 48 horas para abonarlo.",
+                TipoNotificacion.GANADA,
+                itemId
+            );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
             item.setSubastado("si"); 
