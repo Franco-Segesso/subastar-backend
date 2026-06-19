@@ -9,8 +9,13 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 public interface PujaRepository extends JpaRepository<Puja, Integer> {
+
+    List<Puja> findByGanadorIgnoreCaseAndFechaHoraLessThanEqual(
+            String ganador,
+            LocalDateTime fechaHora);
 
     // Busca la mejor oferta recorriendo: Puja -> ItemCatalogo -> Catalogo -> Subasta
     @Query("SELECT MAX(p.importe) FROM Puja p WHERE p.itemCatalogo.catalogo.subasta.id = :idSubasta")

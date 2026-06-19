@@ -46,6 +46,8 @@ public class SubastaService {
     private MedioPagoService medioPagoService;
     @Autowired
     private NotificacionService notificacionService;
+    @Autowired
+    private MultaService multaService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -96,6 +98,7 @@ public class SubastaService {
     public void ingresarSala(Integer subastaId, String emailUsuario) {
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario)
                 .orElseThrow(() -> new RuntimeException("404: Cliente no encontrado"));
+        multaService.validarPuedeParticipar(cliente);
         
         Subasta subasta = subastaRepository.findById(subastaId)
                 .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
@@ -190,6 +193,7 @@ public class SubastaService {
         }
 
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario).orElseThrow();
+        multaService.validarPuedeParticipar(cliente);
         
         ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, request.getItemId())
                 .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));
@@ -299,7 +303,7 @@ public class SubastaService {
             notificacionService.crearNotificacion(
                 ganadora.getAsistente().getCliente(),
                 "Subasta ganada",
-                "Felicitaciones. Ganaste el item #" + itemId + ". Tenes 48 horas para abonarlo.",
+                "Felicitaciones. Ganaste el item #" + itemId + ". Tenes 24 horas para abonarlo.",
                 TipoNotificacion.GANADA,
                 itemId
             );
