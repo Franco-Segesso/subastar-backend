@@ -46,6 +46,8 @@ public class SubastaService {
     private MedioPagoService medioPagoService;
     @Autowired
     private NotificacionService notificacionService;
+    @Autowired
+    private FirebasePushService firebasePushService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -296,12 +298,20 @@ public class SubastaService {
             respuesta.setImporteFinal(ganadora.getImporte());
             respuesta.setCompraId(compra.getIdentificador());
 
+            // 1. Esto guarda la notificación en la base de datos (lo que ya teníamos)
             notificacionService.crearNotificacion(
                 ganadora.getAsistente().getCliente(),
-                "Subasta ganada",
-                "Felicitaciones. Ganaste el item #" + itemId + ". Tenes 48 horas para abonarlo.",
-                TipoNotificacion.GANADA,
+                "¡Subasta Ganada!",
+                "¡Felicidades! Eres el ganador del ítem #" + itemId + ". Tienes 48hs para abonarlo.",
+                com.grupo6.subastar.model.TipoNotificacion.GANADA,
                 itemId
+            );
+
+            // 2. Esto hace que vibre y caiga el cartel en el celular ---
+            firebasePushService.enviarNotificacionPush(
+                ganadora.getAsistente().getCliente().getIdentificador(), // ID del cliente para el Tópico
+                "¡Subasta Ganada!",
+                "¡Felicidades! Eres el ganador del ítem #" + itemId
             );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
