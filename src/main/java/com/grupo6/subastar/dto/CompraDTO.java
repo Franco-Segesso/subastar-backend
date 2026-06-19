@@ -10,7 +10,9 @@ public record CompraDTO(
         Double total,
         String modalidadEntrega,
         String direccionEnvio,
-        String avisoSeguro) {
+        String avisoSeguro,
+        String estadoPago,
+        Integer medioPagoId) {
 
     public record SubastaDTO(Integer identificador, String nombre, String moneda) {
     }

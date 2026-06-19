@@ -5,6 +5,7 @@ public class CierreSubastaDTO {
     private boolean hayGanador;
     private Integer idClienteGanador;
     private Double importeFinal;
+    private Integer compraId;
 
     // Getters y Setters
     public Integer getItemId() { return itemId; }
@@ -15,4 +16,6 @@ public class CierreSubastaDTO {
     public void setIdClienteGanador(Integer idClienteGanador) { this.idClienteGanador = idClienteGanador; }
     public Double getImporteFinal() { return importeFinal; }
     public void setImporteFinal(Double importeFinal) { this.importeFinal = importeFinal; }
+    public Integer getCompraId() { return compraId; }
+    public void setCompraId(Integer compraId) { this.compraId = compraId; }
 }

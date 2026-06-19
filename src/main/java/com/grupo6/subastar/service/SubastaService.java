@@ -42,6 +42,8 @@ public class SubastaService {
     private SimpMessagingTemplate messagingTemplate;
     @Autowired
     private RegistroSubastaRepository registroSubastaRepository;
+    @Autowired
+    private MedioPagoService medioPagoService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -157,8 +159,9 @@ public class SubastaService {
 
     @Transactional
     public synchronized PujaMensajeDTO procesarPuja(Integer subastaId, PujaRequest request, String emailUsuario) {
-        if (request == null || request.getItemId() == null || request.getImporte() == null) {
-            throw new RuntimeException("400: Debe indicar itemId e importe");
+        if (request == null || request.getItemId() == null
+                || request.getImporte() == null || request.getMedioPagoId() == null) {
+            throw new RuntimeException("400: Debe indicar itemId, importe y medioPagoId");
         }
 
         EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
@@ -217,6 +220,14 @@ public class SubastaService {
             }
         }
 
+        double totalComprometido = request.getImporte()
+                + calcularComision(request.getImporte(), item.getComision());
+        medioPagoService.validarParaPuja(
+                request.getMedioPagoId(),
+                cliente,
+                item.getCatalogo().getSubasta().getMoneda(),
+                totalComprometido);
+
         // Crear Puja mapeada a tu entidad exacta
         Puja nuevaPuja = new Puja();
         nuevaPuja.setAsistente(asistente);
@@ -224,6 +235,7 @@ public class SubastaService {
         nuevaPuja.setImporte(request.getImporte());
         nuevaPuja.setFechaHora(ahoraNegocio());
         nuevaPuja.setGanador("no");
+        nuevaPuja.setMedioPagoId(request.getMedioPagoId());
         
         pujaRepository.save(nuevaPuja);
 
@@ -275,11 +287,12 @@ public class SubastaService {
             
             item.setSubastado("si"); 
             item.setPrecioFinal(ganadora.getImporte()); // Guardamos el monto final
-            registrarCompraSiNoExiste(subastaId, item, ganadora);
+            RegistroSubasta compra = registrarCompraSiNoExiste(subastaId, item, ganadora);
 
             respuesta.setHayGanador(true);
             respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
             respuesta.setImporteFinal(ganadora.getImporte());
+            respuesta.setCompraId(compra.getIdentificador());
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
             item.setSubastado("si"); 
@@ -313,7 +326,7 @@ public class SubastaService {
         return respuesta;
     }
 
-    private void registrarCompraSiNoExiste(
+    private RegistroSubasta registrarCompraSiNoExiste(
             Integer subastaId,
             ItemCatalogo item,
             Puja ganadora) {
@@ -323,13 +336,12 @@ public class SubastaService {
             throw new RuntimeException("500: No se pudo registrar la compra ganadora");
         }
 
-        boolean yaRegistrada = registroSubastaRepository
+        Optional<RegistroSubasta> registrada = registroSubastaRepository
                 .findFirstBySubastaIdAndProductoIdAndClienteId(
                         subastaId,
                         producto.getId(),
-                        cliente.getIdentificador())
-                .isPresent();
-        if (yaRegistrada) return;
+                        cliente.getIdentificador());
+        if (registrada.isPresent()) return registrada.get();
 
         RegistroSubasta compra = new RegistroSubasta();
         compra.setSubastaId(subastaId);
@@ -342,13 +354,13 @@ public class SubastaService {
         compra.setCostoEnvio(null);
         compra.setNroPolizaSeguro(producto.getSeguro());
         compra.setModalidadEntrega("pendiente");
-        registroSubastaRepository.save(compra);
+        compra.setMedioPagoId(ganadora.getMedioPagoId());
+        compra.setEstadoPago("pendiente");
+        return registroSubastaRepository.save(compra);
     }
 
     private double calcularComision(Double importe, Double porcentaje) {
-        double base = importe == null ? 0.0 : importe;
-        double tasa = porcentaje == null ? 0.0 : porcentaje;
-        return Math.round((base * tasa / 100.0) * 100.0) / 100.0;
+        return porcentaje == null ? 0.0 : porcentaje;
     }
 
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {

@@ -184,13 +184,11 @@ public class ClientePujaService {
                 .filter(this::esGanadora)
                 .mapToDouble(p -> valor(p.getImporte()))
                 .sum();
-        Integer compraId = ganadora.flatMap(p -> registroSubastaRepository
-                        .findFirstBySubastaIdAndProductoIdAndClienteId(
-                                subasta.getId(),
-                                p.getItemCatalogo().getProducto().getId(),
-                                p.getAsistente().getCliente().getIdentificador()))
-                .map(registro -> registro.getIdentificador())
-                .orElse(null);
+        Optional<com.grupo6.subastar.model.RegistroSubasta> compra = ganadora.flatMap(
+                p -> registroSubastaRepository.findFirstBySubastaIdAndProductoIdAndClienteId(
+                        subasta.getId(),
+                        p.getItemCatalogo().getProducto().getId(),
+                        p.getAsistente().getCliente().getIdentificador()));
 
         return new SubastaParticipacionDTO(
                 new SubastaParticipacionDTO.SubastaDTO(
@@ -205,7 +203,8 @@ public class ClientePujaService {
                 ganadora.isPresent(),
                 ganadora.map(p -> p.getItemCatalogo().getId()).orElse(null),
                 importePagado,
-                compraId);
+                compra.map(registro -> registro.getIdentificador()).orElse(null),
+                compra.map(registro -> registro.getEstadoPago()).orElse(null));
     }
 
     private boolean coincideResultado(SubastaParticipacionDTO item, String resultado) {

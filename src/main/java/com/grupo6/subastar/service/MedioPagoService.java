@@ -7,7 +7,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class MedioPagoService {
@@ -26,6 +31,9 @@ public class MedioPagoService {
 
     @Autowired
     private ClienteRepository clienteRepository;
+
+    @Autowired
+    private RegistroSubastaRepository registroSubastaRepository;
 
     // GET: traer todos los medios de pago activos de un cliente
     public List<MedioPago> obtenerMediosPago(Integer clienteId) throws Exception {
@@ -133,5 +141,126 @@ public class MedioPagoService {
                 .orElseThrow(() -> new Exception("Medio de pago no encontrado con id: " + medioPagoId));
         medio.setActivo("no");
         medioPagoRepository.save(medio);
+    }
+
+    @Transactional(readOnly = true)
+    public MedioPago validarParaPuja(
+            Integer medioPagoId,
+            Cliente cliente,
+            String monedaSubasta,
+            Double importeComprometido) {
+        MedioPago medio = obtenerMedioDelCliente(medioPagoId, cliente);
+        validarActivoYMoneda(medio, monedaSubasta);
+
+        BigDecimal requerido = BigDecimal.valueOf(
+                importeComprometido == null ? 0.0 : importeComprometido);
+        BigDecimal comprometido = BigDecimal.valueOf(valor(
+                registroSubastaRepository.sumPendienteByMedioPagoId(medioPagoId)));
+
+        if (medio instanceof CuentaBancaria cuenta) {
+            BigDecimal disponible = saldo(cuenta.getFondosReservados()).subtract(comprometido);
+            if (disponible.compareTo(requerido) < 0) {
+                throw new RuntimeException("403: Fondos reservados insuficientes");
+            }
+        } else if (medio instanceof ChequeCertificado cheque) {
+            if (!"si".equalsIgnoreCase(cheque.getVerificadoCheque())) {
+                throw new RuntimeException("403: El cheque no esta verificado");
+            }
+            BigDecimal disponible = saldo(cheque.getMontoGarantia()).subtract(comprometido);
+            if (disponible.compareTo(requerido) < 0) {
+                throw new RuntimeException("403: Garantia del cheque insuficiente");
+            }
+        }
+        return medio;
+    }
+
+    @Transactional
+    public MedioPago cobrar(
+            Integer medioPagoId,
+            Cliente cliente,
+            String monedaCompra,
+            Double total) {
+        MedioPago medio = obtenerMedioDelCliente(medioPagoId, cliente);
+        validarActivoYMoneda(medio, monedaCompra);
+        BigDecimal importe = BigDecimal.valueOf(total == null ? 0.0 : total);
+
+        if (medio instanceof CuentaBancaria cuenta) {
+            BigDecimal disponible = saldo(cuenta.getFondosReservados());
+            if (disponible.compareTo(importe) < 0) {
+                throw new RuntimeException("400: Fondos reservados insuficientes");
+            }
+            cuenta.setFondosReservados(disponible.subtract(importe));
+            cuentaRepository.save(cuenta);
+        } else if (medio instanceof ChequeCertificado cheque) {
+            if (!"si".equalsIgnoreCase(cheque.getVerificadoCheque())) {
+                throw new RuntimeException("400: El cheque no esta verificado");
+            }
+            BigDecimal disponible = saldo(cheque.getMontoGarantia());
+            if (disponible.compareTo(importe) < 0) {
+                throw new RuntimeException("400: Garantia del cheque insuficiente");
+            }
+            cheque.setMontoGarantia(disponible.subtract(importe));
+            chequeRepository.save(cheque);
+        }
+        return medio;
+    }
+
+    private MedioPago obtenerMedioDelCliente(Integer medioPagoId, Cliente cliente) {
+        if (medioPagoId == null) {
+            throw new RuntimeException("400: Debe seleccionar un medio de pago");
+        }
+        MedioPago medio = medioPagoRepository.findById(medioPagoId)
+                .orElseThrow(() -> new RuntimeException("404: Medio de pago inexistente"));
+        if (medio.getCliente() == null || cliente == null
+                || !cliente.getIdentificador().equals(
+                medio.getCliente().getIdentificador())) {
+            throw new RuntimeException("403: El medio de pago no pertenece al cliente");
+        }
+        return medio;
+    }
+
+    private void validarActivoYMoneda(MedioPago medio, String moneda) {
+        if (!"si".equalsIgnoreCase(medio.getActivo())) {
+            throw new RuntimeException("403: El medio de pago esta inactivo");
+        }
+        String monedaNormalizada = moneda == null
+                ? "" : moneda.trim().toUpperCase(Locale.ROOT);
+
+        if (medio instanceof CuentaBancaria cuenta
+                && !monedaNormalizada.equalsIgnoreCase(cuenta.getMoneda())) {
+            throw new RuntimeException("403: La moneda de la cuenta no coincide con la subasta");
+        }
+        if (medio instanceof ChequeCertificado cheque
+                && !monedaNormalizada.equalsIgnoreCase(cheque.getMoneda())) {
+            throw new RuntimeException("403: La moneda del cheque no coincide con la subasta");
+        }
+        if (medio instanceof TarjetaCredito tarjeta) {
+            validarVencimiento(tarjeta.getVencimiento());
+            if ("USD".equals(monedaNormalizada)
+                    && !"si".equalsIgnoreCase(tarjeta.getEsExtranjera())) {
+                throw new RuntimeException("403: Para compras en USD se requiere una tarjeta internacional");
+            }
+        }
+    }
+
+    private void validarVencimiento(String vencimiento) {
+        try {
+            YearMonth fecha = YearMonth.parse(
+                    vencimiento,
+                    DateTimeFormatter.ofPattern("MM/yy"));
+            if (fecha.isBefore(YearMonth.now())) {
+                throw new RuntimeException("403: La tarjeta esta vencida");
+            }
+        } catch (DateTimeParseException e) {
+            throw new RuntimeException("403: Vencimiento de tarjeta invalido");
+        }
+    }
+
+    private BigDecimal saldo(BigDecimal valor) {
+        return valor == null ? BigDecimal.ZERO : valor;
+    }
+
+    private double valor(Double numero) {
+        return numero == null ? 0.0 : numero;
     }
 }

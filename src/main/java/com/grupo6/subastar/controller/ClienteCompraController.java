@@ -1,6 +1,7 @@
 package com.grupo6.subastar.controller;
 
 import com.grupo6.subastar.dto.ModalidadEntregaRequest;
+import com.grupo6.subastar.dto.PagarCompraRequest;
 import com.grupo6.subastar.service.CompraService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
 
 @RestController
 @RequestMapping("/clientes/me/compras")
@@ -41,6 +43,20 @@ public class ClienteCompraController {
                     emailAutenticado(),
                     compraId,
                     request == null ? null : request.getModalidad()));
+        } catch (RuntimeException e) {
+            return manejarExcepcion(e);
+        }
+    }
+
+    @PostMapping("/{compraId}/pagar")
+    public ResponseEntity<?> pagar(
+            @PathVariable Integer compraId,
+            @RequestBody PagarCompraRequest request) {
+        try {
+            return ResponseEntity.ok(compraService.pagar(
+                    emailAutenticado(),
+                    compraId,
+                    request == null ? null : request.getMedioPagoId()));
         } catch (RuntimeException e) {
             return manejarExcepcion(e);
         }

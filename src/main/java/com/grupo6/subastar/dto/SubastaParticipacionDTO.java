@@ -10,7 +10,8 @@ public record SubastaParticipacionDTO(
         Boolean gano,
         Integer loteGanado,
         Double importePagado,
-        Integer compraId) {
+        Integer compraId,
+        String estadoPago) {
 
     public record SubastaDTO(
             Integer identificador,

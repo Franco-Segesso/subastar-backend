@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "registroDeSubasta")
@@ -43,6 +44,15 @@ public class RegistroSubasta {
     @Column(name = "modalidadEntrega", nullable = false)
     private String modalidadEntrega;
 
+    @Column(name = "medioPago")
+    private Integer medioPagoId;
+
+    @Column(name = "estadoPago", nullable = false)
+    private String estadoPago;
+
+    @Column(name = "fechaPago")
+    private LocalDateTime fechaPago;
+
     public Integer getIdentificador() { return identificador; }
     public Integer getSubastaId() { return subastaId; }
     public void setSubastaId(Integer subastaId) { this.subastaId = subastaId; }
@@ -62,4 +72,10 @@ public class RegistroSubasta {
     public void setNroPolizaSeguro(String nroPolizaSeguro) { this.nroPolizaSeguro = nroPolizaSeguro; }
     public String getModalidadEntrega() { return modalidadEntrega; }
     public void setModalidadEntrega(String modalidadEntrega) { this.modalidadEntrega = modalidadEntrega; }
+    public Integer getMedioPagoId() { return medioPagoId; }
+    public void setMedioPagoId(Integer medioPagoId) { this.medioPagoId = medioPagoId; }
+    public String getEstadoPago() { return estadoPago; }
+    public void setEstadoPago(String estadoPago) { this.estadoPago = estadoPago; }
+    public LocalDateTime getFechaPago() { return fechaPago; }
+    public void setFechaPago(LocalDateTime fechaPago) { this.fechaPago = fechaPago; }
 }

@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface RegistroSubastaRepository extends JpaRepository<RegistroSubasta, Integer> {
@@ -13,4 +15,9 @@ public interface RegistroSubastaRepository extends JpaRepository<RegistroSubasta
             Integer subastaId,
             Integer productoId,
             Integer clienteId);
+
+    @Query("SELECT COALESCE(SUM(r.importe + r.comision + COALESCE(r.costoEnvio, 0)), 0) " +
+            "FROM RegistroSubasta r WHERE r.medioPagoId = :medioPagoId " +
+            "AND LOWER(r.estadoPago) = 'pendiente'")
+    Double sumPendienteByMedioPagoId(@Param("medioPagoId") Integer medioPagoId);
 }

@@ -2,6 +2,7 @@ package com.grupo6.subastar.service;
 
 import com.grupo6.subastar.dto.CompraDTO;
 import com.grupo6.subastar.dto.ModalidadEntregaResponse;
+import com.grupo6.subastar.dto.PagoCompraResponse;
 import com.grupo6.subastar.model.Catalogo;
 import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.ItemCatalogo;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.time.LocalDateTime;
 
 @Service
 public class CompraService {
@@ -26,18 +28,21 @@ public class CompraService {
     private final SubastaRepository subastaRepository;
     private final ProductoRepository productoRepository;
     private final ItemCatalogoRepository itemRepository;
+    private final MedioPagoService medioPagoService;
 
     public CompraService(
             ClienteRepository clienteRepository,
             RegistroSubastaRepository registroRepository,
             SubastaRepository subastaRepository,
             ProductoRepository productoRepository,
-            ItemCatalogoRepository itemRepository) {
+            ItemCatalogoRepository itemRepository,
+            MedioPagoService medioPagoService) {
         this.clienteRepository = clienteRepository;
         this.registroRepository = registroRepository;
         this.subastaRepository = subastaRepository;
         this.productoRepository = productoRepository;
         this.itemRepository = itemRepository;
+        this.medioPagoService = medioPagoService;
     }
 
     @Transactional(readOnly = true)
@@ -80,7 +85,9 @@ public class CompraService {
                 total,
                 modalidad,
                 direccion,
-                avisoSeguro(modalidad, compra.getNroPolizaSeguro()));
+                avisoSeguro(modalidad, compra.getNroPolizaSeguro()),
+                normalizarEstadoPago(compra.getEstadoPago()),
+                compra.getMedioPagoId());
     }
 
     @Transactional
@@ -99,18 +106,60 @@ public class CompraService {
         if (!"envio".equals(modalidad) && !"retiro".equals(modalidad)) {
             throw new RuntimeException("400: Modalidad invalida");
         }
-        if (!"pendiente".equals(normalizarModalidad(compra.getModalidadEntrega()))) {
-            throw new RuntimeException("409: La entrega ya fue definida");
+        if ("pagada".equals(normalizarEstadoPago(compra.getEstadoPago()))) {
+            throw new RuntimeException("409: No se puede modificar la entrega de una compra pagada");
         }
 
         compra.setModalidadEntrega(modalidad);
-        if ("retiro".equals(modalidad)) {
+        if (compra.getCostoEnvio() == null) {
             compra.setCostoEnvio(0.0);
         }
         registroRepository.save(compra);
         return new ModalidadEntregaResponse(
                 "Modalidad registrada correctamente.",
                 modalidad);
+    }
+
+    @Transactional
+    public PagoCompraResponse pagar(
+            String email,
+            Integer compraId,
+            Integer medioPagoId) {
+        Cliente cliente = obtenerCliente(email);
+        RegistroSubasta compra = registroRepository.findById(compraId)
+                .orElseThrow(() -> new RuntimeException("404: Compra inexistente"));
+        if (!cliente.getIdentificador().equals(compra.getClienteId())) {
+            throw new RuntimeException("403: La compra no pertenece al cliente");
+        }
+        if ("pagada".equals(normalizarEstadoPago(compra.getEstadoPago()))) {
+            throw new RuntimeException("409: La compra ya fue pagada");
+        }
+        if ("pendiente".equals(normalizarModalidad(compra.getModalidadEntrega()))) {
+            throw new RuntimeException("409: Debe seleccionar la modalidad de entrega");
+        }
+
+        Subasta subasta = subastaRepository.findById(compra.getSubastaId())
+                .orElseThrow(() -> new RuntimeException("404: Subasta inexistente"));
+        double total = valor(compra.getImporte())
+                + valor(compra.getComision())
+                + valor(compra.getCostoEnvio());
+
+        medioPagoService.cobrar(
+                medioPagoId,
+                cliente,
+                subasta.getMoneda(),
+                total);
+
+        compra.setMedioPagoId(medioPagoId);
+        compra.setEstadoPago("pagada");
+        compra.setFechaPago(LocalDateTime.now());
+        registroRepository.save(compra);
+
+        return new PagoCompraResponse(
+                "La compra se realizo con exito.",
+                compra.getIdentificador(),
+                compra.getEstadoPago(),
+                medioPagoId);
     }
 
     private Cliente obtenerCliente(String email) {
@@ -141,6 +190,12 @@ public class CompraService {
         return modalidad == null || modalidad.isBlank()
                 ? "pendiente"
                 : modalidad.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizarEstadoPago(String estado) {
+        return estado == null || estado.isBlank()
+                ? "pendiente"
+                : estado.trim().toLowerCase(Locale.ROOT);
     }
 
     private double valor(Double numero) {

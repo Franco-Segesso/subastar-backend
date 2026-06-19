@@ -16,6 +16,8 @@ import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.FotoRepository;
 import com.grupo6.subastar.repository.ProductoRepository;
 import com.grupo6.subastar.repository.SolicitudConsignacionRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +51,8 @@ public class ConsignacionService {
     private CuentaBancariaRepository cuentaBancariaRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Transactional(readOnly = true)
     public List<ConsignacionResponse> listar(String emailUsuario) {
@@ -199,7 +203,8 @@ public class ConsignacionService {
         duenio.setPersona(cliente.getPersona());
         duenio.setNumeroPais(cliente.getPais() != null ? cliente.getPais().getNumero() : null);
         duenio.setVerificadorId(EMPLEADO_SISTEMA_ID);
-        duenioRepository.save(duenio);
+        entityManager.persist(duenio);
+        entityManager.flush();
     }
 
     private ConsignacionResponse aResponse(SolicitudConsignacion solicitud) {

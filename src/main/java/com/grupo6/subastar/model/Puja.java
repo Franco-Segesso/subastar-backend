@@ -23,6 +23,8 @@ public class Puja {
     @Column(name = "fechaHora") 
     private LocalDateTime fechaHora;
 
+    @Column(name = "medioPago")
+    private Integer medioPagoId;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "item", referencedColumnName = "identificador")
@@ -54,4 +56,6 @@ public class Puja {
 
     public Asistente getAsistente() { return asistente; }
     public void setAsistente(Asistente asistente) { this.asistente = asistente; }
+    public Integer getMedioPagoId() { return medioPagoId; }
+    public void setMedioPagoId(Integer medioPagoId) { this.medioPagoId = medioPagoId; }
 }
