@@ -47,6 +47,8 @@ public class SubastaService {
     @Autowired
     private NotificacionService notificacionService;
     @Autowired
+    private MultaService multaService;
+    @Autowired
     private FirebasePushService firebasePushService;
     @Autowired
     private NotificacionesReactivasService notificacionesReactivasService;
@@ -100,6 +102,7 @@ public class SubastaService {
     public void ingresarSala(Integer subastaId, String emailUsuario) {
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario)
                 .orElseThrow(() -> new RuntimeException("404: Cliente no encontrado"));
+        multaService.validarPuedeParticipar(cliente);
         
         Subasta subasta = subastaRepository.findById(subastaId)
                 .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
@@ -194,6 +197,7 @@ public class SubastaService {
         }
 
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario).orElseThrow();
+        multaService.validarPuedeParticipar(cliente);
         
         ItemCatalogo item = itemCatalogoRepository.findByIdAndSubastaId(subastaId, request.getItemId())
                 .orElseThrow(() -> new RuntimeException("404: Ítem no encontrado o no pertenece a la subasta"));

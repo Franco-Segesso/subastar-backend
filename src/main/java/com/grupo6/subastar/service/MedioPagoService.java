@@ -42,6 +42,15 @@ public class MedioPagoService {
         return medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si");
     }
 
+    public List<MedioPago> obtenerMediosPago(String email) {
+        Cliente cliente = clienteRepository.findByPersonaEmail(email)
+                .orElseThrow(() -> new RuntimeException(
+                        "401: Token invalido, ausente o expirado"));
+        return medioPagoRepository.findByClienteIdentificadorAndActivo(
+                cliente.getIdentificador(),
+                "si");
+    }
+
     // POST: agregar tarjeta
     @Transactional
     public MedioPago agregarTarjeta(Integer clienteId, AgregarTarjetaRequest req) throws Exception {

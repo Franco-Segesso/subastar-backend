@@ -31,14 +31,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 String email = jwtUtils.obtenerEmailDelToken(jwt);
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
-                
-                UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-                
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-                
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities());
+                    authentication.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         } catch (Exception e) {
             System.err.println("No se pudo establecer la autenticación del usuario: " + e.getMessage());

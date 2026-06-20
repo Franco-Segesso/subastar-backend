@@ -6,6 +6,7 @@ import com.grupo6.subastar.service.MedioPagoService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,6 +17,18 @@ public class MedioPagoController {
 
     @Autowired
     private MedioPagoService medioPagoService;
+
+    @GetMapping
+    public ResponseEntity<?> obtenerMediosPagoAutenticado() {
+        try {
+            String email = SecurityContextHolder.getContext()
+                    .getAuthentication().getName();
+            return ResponseEntity.ok(medioPagoService.obtenerMediosPago(email));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(e.getMessage());
+        }
+    }
 
     // GET /v1/medios-pago/cliente/{clienteId}
     // Devuelve todos los medios de pago activos de un cliente
