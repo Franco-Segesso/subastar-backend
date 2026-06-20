@@ -36,6 +36,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent.parent
 PROPERTIES_PATH = BACKEND_DIR / "src" / "main" / "resources" / "application.properties"
 PORCENTAJE_DEVOLUCION = Decimal("0.05")
+COMISION_EMPRESA = Decimal("15.00")
+FIREBASE_KEY_PATH = BACKEND_DIR / "src" / "main" / "resources" / "firebase-admin-key.json"
 
 
 @dataclass
@@ -54,6 +56,8 @@ class Consignacion:
     nro_poliza: str | None
     compania: str | None
     valor_asegurado: Decimal | None
+    catalogo_propuesto_id: int | None
+    precio_base_propuesto: Decimal | None
     item_id: int | None
     catalogo_id: int | None
     precio_base: Decimal | None
@@ -153,6 +157,8 @@ SELECT
     p.seguro,
     sg.compania,
     sg.importe,
+    sc.catalogoPropuesto,
+    sc.precioBasePropuesto,
     item.identificador,
     item.catalogo,
     item.precioBase,
@@ -177,7 +183,8 @@ OUTER APPLY (
     WHERE ic.producto = p.identificador
     ORDER BY ic.identificador DESC
 ) item
-LEFT JOIN catalogos ca ON ca.identificador = item.catalogo
+LEFT JOIN catalogos ca
+    ON ca.identificador = COALESCE(item.catalogo, sc.catalogoPropuesto)
 LEFT JOIN subastas su ON su.identificador = ca.subasta
 WHERE sc.identificador = ?
 """
@@ -205,7 +212,8 @@ def etapa(c: Consignacion) -> str:
         not c.nro_poliza
         or not c.compania
         or c.valor_asegurado is None
-        or c.item_id is None
+        or c.catalogo_propuesto_id is None
+        or c.precio_base_propuesto is None
     ):
         return "CONDICIONES"
     if estado == "aceptado" and condiciones != "si":
@@ -278,7 +286,12 @@ def mostrar_resumen(c: Consignacion) -> None:
     if c.item_id:
         print(
             f"Propuesta:    item {c.item_id}, base {c.precio_base}, "
-            f"comision {c.comision}%"
+            f"comision {COMISION_EMPRESA}%"
+        )
+    elif c.catalogo_propuesto_id:
+        print(
+            f"Propuesta:    catalogo {c.catalogo_propuesto_id}, "
+            f"base {c.precio_base_propuesto}, comision {COMISION_EMPRESA}%"
         )
     print("=" * 72)
 
@@ -513,8 +526,60 @@ def pedir_decimal(etiqueta: str, minimo: Decimal = Decimal("0.01")) -> Decimal:
         print(f"Ingresa un numero mayor o igual a {minimo}. Ejemplo: 3000")
 
 
+def enviar_notificacion(
+    conexion,
+    c: Consignacion,
+    titulo: str,
+    mensaje: str,
+) -> None:
+    cursor = conexion.cursor()
+    cursor.execute(
+        """
+        INSERT INTO notificaciones
+            (cliente, titulo, mensaje, tipo, referencia_id, fecha_envio, leido)
+        VALUES (?, ?, ?, 'CONSIGNACION', ?, GETDATE(), 0)
+        """,
+        c.duenio_id,
+        titulo[:150],
+        mensaje[:500],
+        c.solicitud_id,
+    )
+    conexion.commit()
+
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, messaging
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(
+                credentials.Certificate(str(FIREBASE_KEY_PATH))
+            )
+        messaging.send(
+            messaging.Message(
+                data={
+                    "titulo": titulo,
+                    "mensaje": mensaje,
+                    "tipo": "CONSIGNACION",
+                    "referenciaId": str(c.solicitud_id),
+                },
+                topic=f"cliente_{c.duenio_id}",
+            )
+        )
+        print("Notificacion Firebase enviada.")
+    except ImportError:
+        print(
+            "La notificacion se guardo en la app, pero falta firebase-admin "
+            "para enviar la push. Instala: python -m pip install firebase-admin"
+        )
+    except Exception as error:
+        print(
+            "La notificacion se guardo en la app, pero Firebase fallo: "
+            f"{error}"
+        )
+
+
 def preparar_devolucion(c: Consignacion) -> tuple[Decimal, str]:
-    precio_referencia = c.precio_base
+    precio_referencia = c.precio_base_propuesto or c.precio_base
     if precio_referencia is None:
         print(
             "\nLa consignacion no tiene precio base propuesto. Ingresa el "
@@ -581,6 +646,13 @@ def registrar_recepcion(conexion, c: Consignacion) -> None:
         c.producto_id,
     )
     conexion.commit()
+    enviar_notificacion(
+        conexion,
+        c,
+        "Articulo recibido",
+        f"Recibimos '{c.descripcion}' en {c.deposito_nombre or 'el deposito'}. "
+        "Comenzaremos la inspeccion.",
+    )
     print("Recepcion registrada. La consignacion avanzo a inspeccion.")
 
 
@@ -616,6 +688,12 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
             c.solicitud_id,
         )
         conexion.commit()
+        enviar_notificacion(
+            conexion,
+            c,
+            "Documentacion requerida",
+            f"Necesitamos documentacion adicional para '{c.descripcion}': {motivo}",
+        )
         print(
             "Documentacion solicitada. El duenio podra adjuntarla desde "
             "el detalle de la consignacion en Android."
@@ -646,6 +724,13 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
             c.solicitud_id,
         )
         conexion.commit()
+        enviar_notificacion(
+            conexion,
+            c,
+            "Consignacion rechazada",
+            f"'{c.descripcion}' fue rechazado. Motivo: {motivo}. "
+            f"Costo de devolucion: {moneda_devolucion} {costo_devolucion}.",
+        )
         print(
             "Consignacion rechazada. El usuario vera el motivo, el costo "
             "y las instrucciones de devolucion en la app."
@@ -668,6 +753,13 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
         c.solicitud_id,
     )
     conexion.commit()
+    enviar_notificacion(
+        conexion,
+        c,
+        "Inspeccion aprobada",
+        f"'{c.descripcion}' fue aceptado tras la inspeccion. "
+        "La casa preparara las condiciones de subasta.",
+    )
     print("Inspeccion aprobada. Ahora deben prepararse las condiciones.")
 
 
@@ -733,6 +825,13 @@ def revisar_documentacion(conexion, c: Consignacion) -> None:
             "Documentacion aprobada. Ejecuta nuevamente el asistente para "
             "resolver la inspeccion del bien."
         )
+        enviar_notificacion(
+            conexion,
+            c,
+            "Documentacion aprobada",
+            f"La documentacion de '{c.descripcion}' fue aprobada. "
+            "La evaluacion del bien continuara.",
+        )
         return
 
     motivo = input("Motivo del rechazo del bien: ").strip()
@@ -772,6 +871,13 @@ def revisar_documentacion(conexion, c: Consignacion) -> None:
         conexion.rollback()
         raise
     print("Consignacion rechazada luego de revisar la documentacion.")
+    enviar_notificacion(
+        conexion,
+        c,
+        "Consignacion rechazada",
+        f"'{c.descripcion}' fue rechazado luego de revisar la documentacion. "
+        f"Motivo: {motivo}. Costo: {moneda_devolucion} {costo_devolucion}.",
+    )
 
 
 def validar_poliza_existente(cursor, c: Consignacion, nro_poliza: str) -> Any:
@@ -812,14 +918,12 @@ def validar_poliza_existente(cursor, c: Consignacion, nro_poliza: str) -> Any:
 
 def preparar_condiciones(conexion, c: Consignacion) -> None:
     cursor = conexion.cursor()
-    catalogo_id = c.catalogo_id
-    precio_base = c.precio_base
-    comision = c.comision
+    catalogo_id = c.catalogo_propuesto_id
+    precio_base = c.precio_base_propuesto
 
-    if c.item_id is None:
+    if catalogo_id is None or precio_base is None:
         catalogo_id = elegir_o_crear_catalogo(conexion)
         precio_base = pedir_decimal("Precio base")
-        comision = pedir_decimal("Comision de la empresa (%)")
 
     nro_poliza = (c.nro_poliza or input("Numero de poliza: ").strip()).strip()
     if not nro_poliza:
@@ -873,7 +977,7 @@ def preparar_condiciones(conexion, c: Consignacion) -> None:
     print("\nCONDICIONES A REGISTRAR")
     print(f"Catalogo:        {catalogo_id}")
     print(f"Precio base:     {precio_base}")
-    print(f"Comision:        {comision}%")
+    print(f"Comision:        {COMISION_EMPRESA}%")
     print(f"Poliza:          {nro_poliza}")
     print(f"Compania:        {compania}")
     print(f"Valor asegurado: {valor_asegurado}")
@@ -905,18 +1009,18 @@ def preparar_condiciones(conexion, c: Consignacion) -> None:
             c.producto_id,
         )
 
-        if c.item_id is None:
-            cursor.execute(
-                """
-                INSERT INTO itemsCatalogo
-                    (catalogo, producto, precioBase, comision, subastado, precioFinal)
-                VALUES (?, ?, ?, ?, 'no', NULL)
-                """,
-                catalogo_id,
-                c.producto_id,
-                precio_base,
-                comision,
-            )
+        cursor.execute(
+            """
+            UPDATE solicitudesConsignacion
+            SET catalogoPropuesto = ?,
+                precioBasePropuesto = ?,
+                condicionesAceptadas = 'no'
+            WHERE identificador = ?
+            """,
+            catalogo_id,
+            precio_base,
+            c.solicitud_id,
+        )
         conexion.commit()
     except Exception:
         conexion.rollback()
@@ -925,6 +1029,27 @@ def preparar_condiciones(conexion, c: Consignacion) -> None:
     print(
         "Condiciones registradas. Ahora el duenio debe entrar a Android y "
         "aceptarlas o rechazarlas."
+    )
+    subasta = cursor.execute(
+        """
+        SELECT su.fecha, su.hora, su.ubicacion
+        FROM catalogos ca
+        JOIN subastas su ON su.identificador = ca.subasta
+        WHERE ca.identificador = ?
+        """,
+        catalogo_id,
+    ).fetchone()
+    detalle_subasta = (
+        f" Subasta: {subasta.fecha} {subasta.hora}, {subasta.ubicacion}."
+        if subasta else ""
+    )
+    enviar_notificacion(
+        conexion,
+        c,
+        "Condiciones propuestas",
+        f"Ya estan disponibles las condiciones para '{c.descripcion}'. "
+        f"Precio base: {precio_base}. Comision: {COMISION_EMPRESA}%."
+        + detalle_subasta,
     )
 
 

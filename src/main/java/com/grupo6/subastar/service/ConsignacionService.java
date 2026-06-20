@@ -5,6 +5,7 @@ import com.grupo6.subastar.dto.CuentaDestinoRequest;
 import com.grupo6.subastar.dto.MensajeResponse;
 import com.grupo6.subastar.dto.RespuestaConsignacionRequest;
 import com.grupo6.subastar.model.Cliente;
+import com.grupo6.subastar.model.Catalogo;
 import com.grupo6.subastar.model.CuentaBancaria;
 import com.grupo6.subastar.model.Duenio;
 import com.grupo6.subastar.model.Deposito;
@@ -46,6 +47,7 @@ import java.util.stream.Collectors;
 public class ConsignacionService {
 
     private static final int EMPLEADO_SISTEMA_ID = 1;
+    private static final double COMISION_EMPRESA = 15.0;
     private static final BigDecimal PORCENTAJE_DEVOLUCION = new BigDecimal("0.05");
     private static final String INSTRUCCION_DEVOLUCION =
             "El bien debe retirarse del deposito. Si no se retira, sera devuelto "
@@ -175,6 +177,7 @@ public class ConsignacionService {
 
         // CASO 1: EL CLIENTE ACEPTA LAS CONDICIONES
         if (request.getAcepta()) {
+            crearItemConfirmado(solicitud);
             solicitud.setCondicionesAceptadas("si");
             solicitud.getProducto().setDisponible("si");
             productoRepository.save(solicitud.getProducto());
@@ -183,8 +186,8 @@ public class ConsignacionService {
             //Disparo de notificación de Éxito
             notificacionesReactivasService.notificarAceptacionOfertaCliente(
                     cliente,
-                    solicitud.getProducto().getDescripcion(), // Obtiene el nombre del bien
-                    solicitud.getFechaSolicitud().toString(),
+                    solicitud.getProducto().getDescripcion(),
+                    describirSubasta(null, buscarCatalogoPropuesto(solicitud)),
                     solicitud.getIdentificador()
             );
 
@@ -192,11 +195,7 @@ public class ConsignacionService {
         }
 
         // CASO 2: EL CLIENTE RECHAZA LAS CONDICIONES
-        ItemCatalogo itemReservado = buscarItemCatalogo(solicitud.getProducto());
-        registrarCostoDevolucion(solicitud, itemReservado);
-        if (itemReservado != null && !"si".equals(normalizar(itemReservado.getSubastado()))) {
-            itemCatalogoRepository.delete(itemReservado);
-        }
+        registrarCostoDevolucion(solicitud);
         solicitud.setEstado("rechazado");
         solicitud.setMotivoRechazo("Condiciones rechazadas por el cliente");
         solicitud.setCondicionesAceptadas("no");
@@ -282,6 +281,10 @@ public class ConsignacionService {
         }
         solicitud.setEstado("documentacion_presentada");
         solicitudRepository.save(solicitud);
+        notificacionesReactivasService.notificarDocumentacionRecibida(
+                cliente,
+                solicitud.getProducto().getDescripcion(),
+                solicitud.getIdentificador());
         return new MensajeResponse("Documentacion recibida correctamente");
     }
 
@@ -306,6 +309,7 @@ public class ConsignacionService {
         Seguro seguro = buscarSeguro(producto);
         Deposito deposito = buscarDeposito(producto);
         ItemCatalogo item = buscarItemCatalogo(producto);
+        Catalogo catalogoPropuesto = buscarCatalogoPropuesto(solicitud);
 
         ConsignacionResponse response = new ConsignacionResponse();
         response.setIdentificador(solicitud.getIdentificador());
@@ -321,9 +325,10 @@ public class ConsignacionService {
         response.setCondicionesAceptadas("si".equals(normalizar(solicitud.getCondicionesAceptadas())));
         response.setFechaSolicitud(solicitud.getFechaSolicitud());
         response.setProducto(aProductoDto(producto));
-        response.setCondicionesEmpresa(aCondicionesDto(solicitud, seguro, item));
+        response.setCondicionesEmpresa(
+                aCondicionesDto(solicitud, seguro, item, catalogoPropuesto));
         response.setUbicacionDeposito(aUbicacionDto(deposito));
-        response.setSeguro(aSeguroDto(seguro, item));
+        response.setSeguro(aSeguroDto(seguro, item, catalogoPropuesto));
         response.setDocumentosOrigen(aDocumentosDto(solicitud));
         response.setInstancias(aInstanciasDto(solicitud, deposito, seguro, item));
         return response;
@@ -346,15 +351,18 @@ public class ConsignacionService {
     private ConsignacionResponse.CondicionesEmpresaDTO aCondicionesDto(
             SolicitudConsignacion solicitud,
             Seguro seguro,
-            ItemCatalogo item) {
+            ItemCatalogo item,
+            Catalogo catalogoPropuesto) {
         if (!"aceptado".equals(normalizar(solicitud.getEstado()))) return null;
         ConsignacionResponse.CondicionesEmpresaDTO dto = new ConsignacionResponse.CondicionesEmpresaDTO();
-        dto.setPrecioBase(item == null ? null : item.getPrecioBase());
-        dto.setComisionEmpresa(item == null ? null : item.getComision());
+        dto.setPrecioBase(solicitud.getPrecioBasePropuesto() == null
+                ? (item == null ? null : item.getPrecioBase())
+                : solicitud.getPrecioBasePropuesto().doubleValue());
+        dto.setComisionEmpresa(COMISION_EMPRESA);
         dto.setSeguroPoliza(seguro == null ? null : seguro.getNroPoliza());
         dto.setContactoPoliza(seguro == null ? null : seguro.getCompania());
-        dto.setSubastaAsignada(describirSubasta(item));
-        dto.setMoneda(monedaSubasta(item));
+        dto.setSubastaAsignada(describirSubasta(item, catalogoPropuesto));
+        dto.setMoneda(monedaSubasta(item, catalogoPropuesto));
         return dto;
     }
 
@@ -370,14 +378,17 @@ public class ConsignacionService {
         return dto;
     }
 
-    private ConsignacionResponse.SeguroDTO aSeguroDto(Seguro seguro, ItemCatalogo item) {
+    private ConsignacionResponse.SeguroDTO aSeguroDto(
+            Seguro seguro,
+            ItemCatalogo item,
+            Catalogo catalogoPropuesto) {
         if (seguro == null) return null;
         ConsignacionResponse.SeguroDTO dto = new ConsignacionResponse.SeguroDTO();
         dto.setNroPoliza(seguro.getNroPoliza());
         dto.setCompania(seguro.getCompania());
         dto.setImporte(seguro.getImporte() == null ? null : seguro.getImporte().doubleValue());
         dto.setPolizaCombinada(seguro.getPolizaCombinada());
-        dto.setMoneda(monedaSubasta(item));
+        dto.setMoneda(monedaSubasta(item, catalogoPropuesto));
         return dto;
     }
 
@@ -400,7 +411,9 @@ public class ConsignacionService {
         boolean condiciones = "si".equals(normalizar(solicitud.getCondicionesAceptadas()));
         boolean recibido = deposito != null;
         boolean inspeccionado = aceptado || rechazado;
-        boolean condicionesDisponibles = aceptado && seguro != null;
+        boolean condicionesDisponibles = aceptado && seguro != null
+                && solicitud.getCatalogoPropuestoId() != null
+                && solicitud.getPrecioBasePropuesto() != null;
         boolean asignado = condiciones && item != null;
 
         List<ConsignacionResponse.InstanciaDTO> instancias = new ArrayList<>();
@@ -483,36 +496,61 @@ public class ConsignacionService {
         return items.isEmpty() ? null : items.get(0);
     }
 
-    private String describirSubasta(ItemCatalogo item) {
-        if (item == null || item.getCatalogo() == null || item.getCatalogo().getSubasta() == null) {
+    private String describirSubasta(
+            ItemCatalogo item,
+            Catalogo catalogoPropuesto) {
+        Catalogo catalogo = item != null ? item.getCatalogo() : catalogoPropuesto;
+        if (catalogo == null || catalogo.getSubasta() == null) {
             return null;
         }
-        var subasta = item.getCatalogo().getSubasta();
+        var subasta = catalogo.getSubasta();
         String fecha = subasta.getFecha() == null ? "" : subasta.getFecha().toString();
         String hora = subasta.getHora() == null ? "" : subasta.getHora().toString();
         return (fecha + " " + hora).trim();
     }
 
-    private String monedaSubasta(ItemCatalogo item) {
-        if (item == null || item.getCatalogo() == null || item.getCatalogo().getSubasta() == null) {
+    private String monedaSubasta(
+            ItemCatalogo item,
+            Catalogo catalogoPropuesto) {
+        Catalogo catalogo = item != null ? item.getCatalogo() : catalogoPropuesto;
+        if (catalogo == null || catalogo.getSubasta() == null) {
             return null;
         }
-        return item.getCatalogo().getSubasta().getMoneda();
+        return catalogo.getSubasta().getMoneda();
     }
 
-    private void registrarCostoDevolucion(
-            SolicitudConsignacion solicitud,
-            ItemCatalogo item) {
-        if (item == null || item.getPrecioBase() == null) {
+    private void registrarCostoDevolucion(SolicitudConsignacion solicitud) {
+        if (solicitud.getPrecioBasePropuesto() == null) {
             solicitud.setCostoDevolucion(null);
             solicitud.setMonedaDevolucion(null);
             return;
         }
-        BigDecimal precioBase = BigDecimal.valueOf(item.getPrecioBase());
         solicitud.setCostoDevolucion(
-                precioBase.multiply(PORCENTAJE_DEVOLUCION)
+                solicitud.getPrecioBasePropuesto().multiply(PORCENTAJE_DEVOLUCION)
                         .setScale(2, RoundingMode.HALF_UP));
-        solicitud.setMonedaDevolucion(monedaSubasta(item));
+        solicitud.setMonedaDevolucion(
+                monedaSubasta(null, buscarCatalogoPropuesto(solicitud)));
+    }
+
+    private Catalogo buscarCatalogoPropuesto(SolicitudConsignacion solicitud) {
+        if (solicitud.getCatalogoPropuestoId() == null) return null;
+        return entityManager.find(Catalogo.class, solicitud.getCatalogoPropuestoId());
+    }
+
+    private void crearItemConfirmado(SolicitudConsignacion solicitud) {
+        if (buscarItemCatalogo(solicitud.getProducto()) != null) return;
+        Catalogo catalogo = buscarCatalogoPropuesto(solicitud);
+        if (catalogo == null || solicitud.getPrecioBasePropuesto() == null) {
+            throw new RuntimeException("409: Las condiciones propuestas estan incompletas");
+        }
+        ItemCatalogo item = new ItemCatalogo();
+        item.setCatalogo(catalogo);
+        item.setProducto(solicitud.getProducto());
+        item.setPrecioBase(solicitud.getPrecioBasePropuesto().doubleValue());
+        item.setComision(COMISION_EMPRESA);
+        item.setSubastado("no");
+        item.setPrecioFinal(null);
+        itemCatalogoRepository.save(item);
     }
 
     private boolean esBlanco(String valor) {

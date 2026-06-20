@@ -52,6 +52,8 @@ public class SubastaService {
     private FirebasePushService firebasePushService;
     @Autowired
     private NotificacionesReactivasService notificacionesReactivasService;
+    @Autowired
+    private SolicitudConsignacionRepository solicitudConsignacionRepository;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -323,7 +325,9 @@ public class SubastaService {
                 item.getProducto().getDescripcion(), 
                 valorPujado, 
                 comisiones, 
-                item.getId()
+                solicitudConsignacionRepository
+                        .findIdByProductoId(item.getProducto().getId())
+                        .orElse(null)
             );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
@@ -339,7 +343,9 @@ public class SubastaService {
                 item.getProducto().getDescripcion(), 
                 item.getPrecioFinal(), 
                 comisiones, 
-                item.getId()
+                solicitudConsignacionRepository
+                        .findIdByProductoId(item.getProducto().getId())
+                        .orElse(null)
             );
         }
 

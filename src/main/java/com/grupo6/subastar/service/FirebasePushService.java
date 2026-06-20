@@ -8,13 +8,26 @@ import org.springframework.stereotype.Service;
 public class FirebasePushService {
 
     public void enviarNotificacionPush(Integer clienteId, String titulo, String mensaje) {
+        enviarNotificacionPush(clienteId, titulo, mensaje, null, null);
+    }
+
+    public void enviarNotificacionPush(
+            Integer clienteId,
+            String titulo,
+            String mensaje,
+            String tipo,
+            Integer referenciaId) {
         String topic = "cliente_" + clienteId;
 
-        Message pushMessage = Message.builder()
+        Message.Builder builder = Message.builder()
                 .putData("titulo", titulo)
                 .putData("mensaje", mensaje)
-                .setTopic(topic)
-                .build();
+                .setTopic(topic);
+        if (tipo != null) builder.putData("tipo", tipo);
+        if (referenciaId != null) {
+            builder.putData("referenciaId", referenciaId.toString());
+        }
+        Message pushMessage = builder.build();
 
         try {
             System.out.println(">> Intentando enviar push al canal: " + topic);

@@ -38,6 +38,12 @@ public class SolicitudConsignacion {
     @Column(name = "motivoDocumentacion")
     private String motivoDocumentacion;
 
+    @Column(name = "catalogoPropuesto")
+    private Integer catalogoPropuestoId;
+
+    @Column(name = "precioBasePropuesto", precision = 18, scale = 2)
+    private BigDecimal precioBasePropuesto;
+
     public Integer getIdentificador() { return identificador; }
     public void setIdentificador(Integer identificador) { this.identificador = identificador; }
     public Producto getProducto() { return producto; }
@@ -56,4 +62,8 @@ public class SolicitudConsignacion {
     public void setCondicionesAceptadas(String condicionesAceptadas) { this.condicionesAceptadas = condicionesAceptadas; }
     public String getMotivoDocumentacion() { return motivoDocumentacion; }
     public void setMotivoDocumentacion(String motivoDocumentacion) { this.motivoDocumentacion = motivoDocumentacion; }
+    public Integer getCatalogoPropuestoId() { return catalogoPropuestoId; }
+    public void setCatalogoPropuestoId(Integer catalogoPropuestoId) { this.catalogoPropuestoId = catalogoPropuestoId; }
+    public BigDecimal getPrecioBasePropuesto() { return precioBasePropuesto; }
+    public void setPrecioBasePropuesto(BigDecimal precioBasePropuesto) { this.precioBasePropuesto = precioBasePropuesto; }
 }

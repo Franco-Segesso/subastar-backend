@@ -148,7 +148,9 @@ public class MultaService {
             firebasePushService.enviarNotificacionPush(
                     cliente.getIdentificador(),
                     "Multa por falta de pago",
-                    "Venció el plazo de 24hs para el ítem #" + puja.getItemCatalogo().getId() + ". Se te ha aplicado una multa del 10%."
+                    "Venció el plazo de 24hs para el ítem #" + puja.getItemCatalogo().getId() + ". Se te ha aplicado una multa del 10%.",
+                    TipoNotificacion.MULTA.name(),
+                    multa.getIdentificador()
             );
         }
     }
@@ -187,7 +189,9 @@ public class MultaService {
             firebasePushService.enviarNotificacionPush(
                     multa.getCliente().getIdentificador(),
                     "Cuenta Suspendida",
-                    "Plazo de 72hs vencido. Tu cuenta ha sido inactivada."
+                    "Plazo de 72hs vencido. Tu cuenta ha sido inactivada.",
+                    TipoNotificacion.MULTA.name(),
+                    multa.getIdentificador()
             );
             
         }
