@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 @Service
 public class CompraService {
 
+    private static final double COSTO_ENVIO_FIJO = 5000.0;
     private final ClienteRepository clienteRepository;
     private final RegistroSubastaRepository registroRepository;
     private final SubastaRepository subastaRepository;
@@ -111,9 +112,8 @@ public class CompraService {
         }
 
         compra.setModalidadEntrega(modalidad);
-        if (compra.getCostoEnvio() == null) {
-            compra.setCostoEnvio(0.0);
-        }
+        compra.setCostoEnvio("envio".equals(modalidad)
+                ? COSTO_ENVIO_FIJO : 0.0);
         registroRepository.save(compra);
         return new ModalidadEntregaResponse(
                 "Modalidad registrada correctamente.",

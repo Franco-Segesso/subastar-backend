@@ -7,6 +7,9 @@ public class ConsignacionResponse {
     private Integer identificador;
     private String estado;
     private String motivoRechazo;
+    private Double costoDevolucion;
+    private String monedaDevolucion;
+    private String instruccionDevolucion;
     private String motivoDocumentacion;
     private Boolean condicionesAceptadas;
     private LocalDateTime fechaSolicitud;
@@ -23,6 +26,12 @@ public class ConsignacionResponse {
     public void setEstado(String estado) { this.estado = estado; }
     public String getMotivoRechazo() { return motivoRechazo; }
     public void setMotivoRechazo(String motivoRechazo) { this.motivoRechazo = motivoRechazo; }
+    public Double getCostoDevolucion() { return costoDevolucion; }
+    public void setCostoDevolucion(Double costoDevolucion) { this.costoDevolucion = costoDevolucion; }
+    public String getMonedaDevolucion() { return monedaDevolucion; }
+    public void setMonedaDevolucion(String monedaDevolucion) { this.monedaDevolucion = monedaDevolucion; }
+    public String getInstruccionDevolucion() { return instruccionDevolucion; }
+    public void setInstruccionDevolucion(String instruccionDevolucion) { this.instruccionDevolucion = instruccionDevolucion; }
     public String getMotivoDocumentacion() { return motivoDocumentacion; }
     public void setMotivoDocumentacion(String motivoDocumentacion) { this.motivoDocumentacion = motivoDocumentacion; }
     public Boolean getCondicionesAceptadas() { return condicionesAceptadas; }

@@ -35,6 +35,7 @@ except ImportError:
 SCRIPT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = SCRIPT_DIR.parent.parent
 PROPERTIES_PATH = BACKEND_DIR / "src" / "main" / "resources" / "application.properties"
+PORCENTAJE_DEVOLUCION = Decimal("0.05")
 
 
 @dataclass
@@ -43,6 +44,8 @@ class Consignacion:
     estado: str
     condiciones_aceptadas: str
     motivo_documentacion: str | None
+    costo_devolucion: Decimal | None
+    moneda_devolucion: str | None
     producto_id: int
     descripcion: str
     duenio_id: int
@@ -59,6 +62,7 @@ class Consignacion:
     subasta_fecha: Any
     subasta_hora: Any
     subasta_estado: str | None
+    subasta_moneda: str | None
     cantidad_documentos: int
 
 
@@ -139,6 +143,8 @@ SELECT
     LTRIM(RTRIM(COALESCE(sc.estado, 'pendiente'))),
     LTRIM(RTRIM(COALESCE(sc.condicionesAceptadas, 'no'))),
     sc.motivoDocumentacion,
+    sc.costoDevolucion,
+    sc.monedaDevolucion,
     p.identificador,
     p.descripcionCompleta,
     p.duenio,
@@ -155,6 +161,7 @@ SELECT
     su.fecha,
     su.hora,
     su.estado,
+    su.moneda,
     (
         SELECT COUNT(*)
         FROM documentosConsignacion dc
@@ -261,6 +268,11 @@ def mostrar_resumen(c: Consignacion) -> None:
     print(f"Poliza:       {c.nro_poliza or 'Sin asignar'}")
     if c.motivo_documentacion:
         print(f"Documentacion:{c.motivo_documentacion}")
+    if c.costo_devolucion is not None:
+        print(
+            f"Devolucion:   {c.moneda_devolucion or '--'} "
+            f"{c.costo_devolucion}"
+        )
     if c.cantidad_documentos:
         print(f"Archivos:     {c.cantidad_documentos}")
     if c.item_id:
@@ -501,6 +513,55 @@ def pedir_decimal(etiqueta: str, minimo: Decimal = Decimal("0.01")) -> Decimal:
         print(f"Ingresa un numero mayor o igual a {minimo}. Ejemplo: 3000")
 
 
+def preparar_devolucion(c: Consignacion) -> tuple[Decimal, str]:
+    precio_referencia = c.precio_base
+    if precio_referencia is None:
+        print(
+            "\nLa consignacion no tiene precio base propuesto. Ingresa el "
+            "valor de referencia para calcular el costo de devolucion."
+        )
+        precio_referencia = pedir_decimal("Precio de referencia")
+    moneda = c.subasta_moneda or pedir_opcion("Moneda", ("ARS", "USD"))
+    costo = (
+        Decimal(str(precio_referencia)) * PORCENTAJE_DEVOLUCION
+    ).quantize(Decimal("0.01"))
+    print(
+        f"Costo de devolucion: {moneda} {costo} "
+        f"(5% de {moneda} {precio_referencia})"
+    )
+    return costo, moneda
+
+
+def completar_devolucion_historica(conexion, c: Consignacion) -> None:
+    if c.costo_devolucion is not None:
+        print(
+            "\nLa consignacion ya tiene costo de devolucion: "
+            f"{c.moneda_devolucion or '--'} {c.costo_devolucion}."
+        )
+        print(
+            "El bien debe retirarse del deposito. Si no se retira, sera "
+            "devuelto al domicilio declarado con cargo al duenio."
+        )
+        return
+    costo, moneda = preparar_devolucion(c)
+    if not confirmar("Guardar este costo en la consignacion rechazada?"):
+        return
+    cursor = conexion.cursor()
+    cursor.execute(
+        """
+        UPDATE solicitudesConsignacion
+        SET costoDevolucion = ?,
+            monedaDevolucion = ?
+        WHERE identificador = ?
+        """,
+        costo,
+        moneda,
+        c.solicitud_id,
+    )
+    conexion.commit()
+    print("Costo de devolucion historico registrado.")
+
+
 def registrar_recepcion(conexion, c: Consignacion) -> None:
     cursor = conexion.cursor()
     deposito_id = elegir_fila(
@@ -566,6 +627,7 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
         if not motivo:
             print("El motivo es obligatorio.")
             return
+        costo_devolucion, moneda_devolucion = preparar_devolucion(c)
         if not confirmar("Confirmar rechazo de la consignacion?"):
             return
         cursor.execute(
@@ -573,14 +635,21 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
             UPDATE solicitudesConsignacion
             SET estado = 'rechazado',
                 motivoRechazo = ?,
+                costoDevolucion = ?,
+                monedaDevolucion = ?,
                 condicionesAceptadas = 'no'
             WHERE identificador = ?
             """,
             motivo,
+            costo_devolucion,
+            moneda_devolucion,
             c.solicitud_id,
         )
         conexion.commit()
-        print("Consignacion rechazada. El usuario vera el motivo en la app.")
+        print(
+            "Consignacion rechazada. El usuario vera el motivo, el costo "
+            "y las instrucciones de devolucion en la app."
+        )
         return
 
     if not confirmar("Confirmar que el bien fue inspeccionado y aceptado?"):
@@ -590,6 +659,8 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
         UPDATE solicitudesConsignacion
         SET estado = 'aceptado',
             motivoRechazo = NULL,
+            costoDevolucion = NULL,
+            monedaDevolucion = NULL,
             motivoDocumentacion = NULL,
             condicionesAceptadas = 'no'
         WHERE identificador = ?
@@ -668,6 +739,7 @@ def revisar_documentacion(conexion, c: Consignacion) -> None:
     if not motivo:
         print("El motivo es obligatorio.")
         return
+    costo_devolucion, moneda_devolucion = preparar_devolucion(c)
     if not confirmar("Rechazar definitivamente la consignacion?"):
         return
     try:
@@ -684,11 +756,15 @@ def revisar_documentacion(conexion, c: Consignacion) -> None:
             UPDATE solicitudesConsignacion
             SET estado = 'rechazado',
                 motivoRechazo = ?,
+                costoDevolucion = ?,
+                monedaDevolucion = ?,
                 motivoDocumentacion = NULL,
                 condicionesAceptadas = 'no'
             WHERE identificador = ?
             """,
             motivo,
+            costo_devolucion,
+            moneda_devolucion,
             c.solicitud_id,
         )
         conexion.commit()
@@ -886,7 +962,7 @@ def avanzar(conexion, solicitud_id: int) -> None:
             "asignada a una subasta."
         )
     elif estado_actual == "RECHAZADA":
-        print("\nLa consignacion fue rechazada y no puede seguir avanzando.")
+        completar_devolucion_historica(conexion, c)
     else:
         print(
             "\nLos datos no forman una instancia valida. Revisa deposito, estado, "

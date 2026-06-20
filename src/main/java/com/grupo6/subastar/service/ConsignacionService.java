@@ -32,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -44,6 +46,10 @@ import java.util.stream.Collectors;
 public class ConsignacionService {
 
     private static final int EMPLEADO_SISTEMA_ID = 1;
+    private static final BigDecimal PORCENTAJE_DEVOLUCION = new BigDecimal("0.05");
+    private static final String INSTRUCCION_DEVOLUCION =
+            "El bien debe retirarse del deposito. Si no se retira, sera devuelto "
+                    + "al domicilio declarado y el costo quedara a cargo del duenio.";
 
     @Autowired
     private ClienteRepository clienteRepository;
@@ -168,6 +174,7 @@ public class ConsignacionService {
         }
 
         ItemCatalogo itemReservado = buscarItemCatalogo(solicitud.getProducto());
+        registrarCostoDevolucion(solicitud, itemReservado);
         if (itemReservado != null && !"si".equals(normalizar(itemReservado.getSubastado()))) {
             itemCatalogoRepository.delete(itemReservado);
         }
@@ -266,6 +273,12 @@ public class ConsignacionService {
         response.setIdentificador(solicitud.getIdentificador());
         response.setEstado(solicitud.getEstado());
         response.setMotivoRechazo(solicitud.getMotivoRechazo());
+        response.setCostoDevolucion(solicitud.getCostoDevolucion() == null
+                ? null : solicitud.getCostoDevolucion().doubleValue());
+        response.setMonedaDevolucion(solicitud.getMonedaDevolucion());
+        response.setInstruccionDevolucion(
+                "rechazado".equals(normalizar(solicitud.getEstado()))
+                        ? INSTRUCCION_DEVOLUCION : null);
         response.setMotivoDocumentacion(solicitud.getMotivoDocumentacion());
         response.setCondicionesAceptadas("si".equals(normalizar(solicitud.getCondicionesAceptadas())));
         response.setFechaSolicitud(solicitud.getFechaSolicitud());
@@ -447,6 +460,21 @@ public class ConsignacionService {
             return null;
         }
         return item.getCatalogo().getSubasta().getMoneda();
+    }
+
+    private void registrarCostoDevolucion(
+            SolicitudConsignacion solicitud,
+            ItemCatalogo item) {
+        if (item == null || item.getPrecioBase() == null) {
+            solicitud.setCostoDevolucion(null);
+            solicitud.setMonedaDevolucion(null);
+            return;
+        }
+        BigDecimal precioBase = BigDecimal.valueOf(item.getPrecioBase());
+        solicitud.setCostoDevolucion(
+                precioBase.multiply(PORCENTAJE_DEVOLUCION)
+                        .setScale(2, RoundingMode.HALF_UP));
+        solicitud.setMonedaDevolucion(monedaSubasta(item));
     }
 
     private boolean esBlanco(String valor) {

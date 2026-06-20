@@ -1,6 +1,7 @@
 package com.grupo6.subastar.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,6 +23,12 @@ public class SolicitudConsignacion {
     @Column(name = "motivoRechazo")
     private String motivoRechazo;
 
+    @Column(name = "costoDevolucion", precision = 18, scale = 2)
+    private BigDecimal costoDevolucion;
+
+    @Column(name = "monedaDevolucion", length = 3)
+    private String monedaDevolucion;
+
     @Column(name = "fechaSolicitud")
     private LocalDateTime fechaSolicitud;
 
@@ -39,6 +46,10 @@ public class SolicitudConsignacion {
     public void setEstado(String estado) { this.estado = estado; }
     public String getMotivoRechazo() { return motivoRechazo; }
     public void setMotivoRechazo(String motivoRechazo) { this.motivoRechazo = motivoRechazo; }
+    public BigDecimal getCostoDevolucion() { return costoDevolucion; }
+    public void setCostoDevolucion(BigDecimal costoDevolucion) { this.costoDevolucion = costoDevolucion; }
+    public String getMonedaDevolucion() { return monedaDevolucion; }
+    public void setMonedaDevolucion(String monedaDevolucion) { this.monedaDevolucion = monedaDevolucion; }
     public LocalDateTime getFechaSolicitud() { return fechaSolicitud; }
     public void setFechaSolicitud(LocalDateTime fechaSolicitud) { this.fechaSolicitud = fechaSolicitud; }
     public String getCondicionesAceptadas() { return condicionesAceptadas; }
