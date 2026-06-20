@@ -42,6 +42,7 @@ class Consignacion:
     solicitud_id: int
     estado: str
     condiciones_aceptadas: str
+    motivo_documentacion: str | None
     producto_id: int
     descripcion: str
     duenio_id: int
@@ -58,6 +59,7 @@ class Consignacion:
     subasta_fecha: Any
     subasta_hora: Any
     subasta_estado: str | None
+    cantidad_documentos: int
 
 
 def propiedades() -> dict[str, str]:
@@ -136,6 +138,7 @@ SELECT
     sc.identificador,
     LTRIM(RTRIM(COALESCE(sc.estado, 'pendiente'))),
     LTRIM(RTRIM(COALESCE(sc.condicionesAceptadas, 'no'))),
+    sc.motivoDocumentacion,
     p.identificador,
     p.descripcionCompleta,
     p.duenio,
@@ -151,7 +154,12 @@ SELECT
     su.identificador,
     su.fecha,
     su.hora,
-    su.estado
+    su.estado,
+    (
+        SELECT COUNT(*)
+        FROM documentosConsignacion dc
+        WHERE dc.solicitud = sc.identificador
+    )
 FROM solicitudesConsignacion sc
 JOIN productos p ON p.identificador = sc.producto
 LEFT JOIN depositos d ON d.identificador = p.depositoActual
@@ -180,6 +188,10 @@ def etapa(c: Consignacion) -> str:
         return "RECHAZADA"
     if c.deposito_id is None:
         return "RECEPCION"
+    if estado == "documentacion_pendiente":
+        return "DOCUMENTACION_PENDIENTE"
+    if estado == "documentacion_presentada":
+        return "REVISION_DOCUMENTACION"
     if estado == "pendiente":
         return "INSPECCION"
     if estado == "aceptado" and (
@@ -200,6 +212,8 @@ def descripcion_etapa(c: Consignacion) -> str:
     nombres = {
         "RECEPCION": "Solicitud enviada - falta registrar la recepcion en deposito",
         "INSPECCION": "Recibido en deposito - falta inspeccionar",
+        "DOCUMENTACION_PENDIENTE": "Esperando documentacion del duenio",
+        "REVISION_DOCUMENTACION": "Documentacion presentada - falta revisarla",
         "CONDICIONES": "Inspeccionado y aceptado - falta preparar condiciones",
         "ESPERANDO_USUARIO": "Esperando que el duenio acepte o rechace desde Android",
         "ASIGNADA": "Condiciones aceptadas - bien asignado a una subasta",
@@ -245,6 +259,10 @@ def mostrar_resumen(c: Consignacion) -> None:
     print(f"Instancia:    {descripcion_etapa(c)}")
     print(f"Deposito:     {c.deposito_nombre or 'Sin asignar'}")
     print(f"Poliza:       {c.nro_poliza or 'Sin asignar'}")
+    if c.motivo_documentacion:
+        print(f"Documentacion:{c.motivo_documentacion}")
+    if c.cantidad_documentos:
+        print(f"Archivos:     {c.cantidad_documentos}")
     if c.item_id:
         print(
             f"Propuesta:    item {c.item_id}, base {c.precio_base}, "
@@ -507,12 +525,42 @@ def registrar_recepcion(conexion, c: Consignacion) -> None:
 
 def registrar_inspeccion(conexion, c: Consignacion) -> None:
     while True:
-        decision = input("Resultado de inspeccion: [A]ceptar / [R]echazar: ").strip().lower()
-        if decision in ("a", "aceptar", "r", "rechazar"):
+        decision = input(
+            "Resultado: [A]ceptar / [R]echazar / pedir [D]ocumentacion: "
+        ).strip().lower()
+        if decision in ("a", "aceptar", "r", "rechazar", "d", "documentacion"):
             break
         print("Opcion invalida.")
 
     cursor = conexion.cursor()
+    if decision.startswith("d"):
+        motivo = input(
+            "Que documentacion debe presentar el duenio y por que?: "
+        ).strip()
+        if not motivo:
+            print("La explicacion es obligatoria.")
+            return
+        if not confirmar("Solicitar esta documentacion al duenio?"):
+            return
+        cursor.execute(
+            """
+            UPDATE solicitudesConsignacion
+            SET estado = 'documentacion_pendiente',
+                motivoDocumentacion = ?,
+                motivoRechazo = NULL,
+                condicionesAceptadas = 'no'
+            WHERE identificador = ?
+            """,
+            motivo,
+            c.solicitud_id,
+        )
+        conexion.commit()
+        print(
+            "Documentacion solicitada. El duenio podra adjuntarla desde "
+            "el detalle de la consignacion en Android."
+        )
+        return
+
     if decision.startswith("r"):
         motivo = input("Motivo del rechazo: ").strip()
         if not motivo:
@@ -542,6 +590,7 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
         UPDATE solicitudesConsignacion
         SET estado = 'aceptado',
             motivoRechazo = NULL,
+            motivoDocumentacion = NULL,
             condicionesAceptadas = 'no'
         WHERE identificador = ?
         """,
@@ -549,6 +598,104 @@ def registrar_inspeccion(conexion, c: Consignacion) -> None:
     )
     conexion.commit()
     print("Inspeccion aprobada. Ahora deben prepararse las condiciones.")
+
+
+def revisar_documentacion(conexion, c: Consignacion) -> None:
+    cursor = conexion.cursor()
+    documentos = cursor.execute(
+        """
+        SELECT identificador, nombreArchivo, urlArchivo, descripcion, fechaCarga, estado
+        FROM documentosConsignacion
+        WHERE solicitud = ?
+        ORDER BY fechaCarga
+        """,
+        c.solicitud_id,
+    ).fetchall()
+    if not documentos:
+        print("No hay documentos cargados para revisar.")
+        return
+
+    print("\nDOCUMENTACION PRESENTADA")
+    for documento in documentos:
+        print("-" * 72)
+        print(f"ID:          {documento.identificador}")
+        print(f"Archivo:     {documento.nombreArchivo}")
+        print(f"Descripcion: {documento.descripcion or '--'}")
+        print(f"Fecha:       {documento.fechaCarga}")
+        print(f"URL:         {documento.urlArchivo}")
+    print("-" * 72)
+
+    while True:
+        decision = input(
+            "Revision: [A]probar y volver a inspeccion / [R]echazar bien: "
+        ).strip().lower()
+        if decision in ("a", "aprobar", "r", "rechazar"):
+            break
+        print("Opcion invalida.")
+
+    if decision.startswith("a"):
+        if not confirmar("Aprobar la documentacion presentada?"):
+            return
+        try:
+            cursor.execute(
+                """
+                UPDATE documentosConsignacion
+                SET estado = 'aprobado'
+                WHERE solicitud = ?
+                """,
+                c.solicitud_id,
+            )
+            cursor.execute(
+                """
+                UPDATE solicitudesConsignacion
+                SET estado = 'pendiente',
+                    motivoDocumentacion = NULL
+                WHERE identificador = ?
+                """,
+                c.solicitud_id,
+            )
+            conexion.commit()
+        except Exception:
+            conexion.rollback()
+            raise
+        print(
+            "Documentacion aprobada. Ejecuta nuevamente el asistente para "
+            "resolver la inspeccion del bien."
+        )
+        return
+
+    motivo = input("Motivo del rechazo del bien: ").strip()
+    if not motivo:
+        print("El motivo es obligatorio.")
+        return
+    if not confirmar("Rechazar definitivamente la consignacion?"):
+        return
+    try:
+        cursor.execute(
+            """
+            UPDATE documentosConsignacion
+            SET estado = 'rechazado'
+            WHERE solicitud = ?
+            """,
+            c.solicitud_id,
+        )
+        cursor.execute(
+            """
+            UPDATE solicitudesConsignacion
+            SET estado = 'rechazado',
+                motivoRechazo = ?,
+                motivoDocumentacion = NULL,
+                condicionesAceptadas = 'no'
+            WHERE identificador = ?
+            """,
+            motivo,
+            c.solicitud_id,
+        )
+        conexion.commit()
+    except Exception:
+        conexion.rollback()
+        raise
+    print("Consignacion rechazada luego de revisar la documentacion.")
 
 
 def validar_poliza_existente(cursor, c: Consignacion, nro_poliza: str) -> Any:
@@ -718,6 +865,13 @@ def avanzar(conexion, solicitud_id: int) -> None:
         registrar_recepcion(conexion, c)
     elif estado_actual == "INSPECCION":
         registrar_inspeccion(conexion, c)
+    elif estado_actual == "DOCUMENTACION_PENDIENTE":
+        print(
+            "\nEl duenio todavia debe adjuntar la documentacion desde Android.\n"
+            f"Solicitud: {c.motivo_documentacion or '--'}"
+        )
+    elif estado_actual == "REVISION_DOCUMENTACION":
+        revisar_documentacion(conexion, c)
     elif estado_actual == "CONDICIONES":
         preparar_condiciones(conexion, c)
     elif estado_actual == "ESPERANDO_USUARIO":

@@ -28,6 +28,9 @@ public class SolicitudConsignacion {
     @Column(name = "condicionesAceptadas")
     private String condicionesAceptadas;
 
+    @Column(name = "motivoDocumentacion")
+    private String motivoDocumentacion;
+
     public Integer getIdentificador() { return identificador; }
     public void setIdentificador(Integer identificador) { this.identificador = identificador; }
     public Producto getProducto() { return producto; }
@@ -40,4 +43,6 @@ public class SolicitudConsignacion {
     public void setFechaSolicitud(LocalDateTime fechaSolicitud) { this.fechaSolicitud = fechaSolicitud; }
     public String getCondicionesAceptadas() { return condicionesAceptadas; }
     public void setCondicionesAceptadas(String condicionesAceptadas) { this.condicionesAceptadas = condicionesAceptadas; }
+    public String getMotivoDocumentacion() { return motivoDocumentacion; }
+    public void setMotivoDocumentacion(String motivoDocumentacion) { this.motivoDocumentacion = motivoDocumentacion; }
 }

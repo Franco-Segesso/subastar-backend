@@ -8,6 +8,7 @@ import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.CuentaBancaria;
 import com.grupo6.subastar.model.Duenio;
 import com.grupo6.subastar.model.Deposito;
+import com.grupo6.subastar.model.DocumentoConsignacion;
 import com.grupo6.subastar.model.Foto;
 import com.grupo6.subastar.model.ItemCatalogo;
 import com.grupo6.subastar.model.Producto;
@@ -17,6 +18,7 @@ import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.CuentaBancariaRepository;
 import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.DepositoRepository;
+import com.grupo6.subastar.repository.DocumentoConsignacionRepository;
 import com.grupo6.subastar.repository.FotoRepository;
 import com.grupo6.subastar.repository.ItemCatalogoRepository;
 import com.grupo6.subastar.repository.ProductoRepository;
@@ -61,6 +63,8 @@ public class ConsignacionService {
     private DepositoRepository depositoRepository;
     @Autowired
     private ItemCatalogoRepository itemCatalogoRepository;
+    @Autowired
+    private DocumentoConsignacionRepository documentoRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
     @PersistenceContext
@@ -203,11 +207,36 @@ public class ConsignacionService {
 
     public MensajeResponse registrarDocumentacion(String emailUsuario, Integer id, List<MultipartFile> archivos, String descripcion) {
         Cliente cliente = obtenerCliente(emailUsuario);
-        solicitudRepository.findByIdAndClienteId(id, cliente.getIdentificador())
+        SolicitudConsignacion solicitud = solicitudRepository.findByIdAndClienteId(id, cliente.getIdentificador())
                 .orElseThrow(() -> new RuntimeException("404: Recurso no encontrado"));
         if (archivos == null || archivos.isEmpty()) {
             throw new RuntimeException("400: Sin archivos o formato invalido");
         }
+        if (!"documentacion_pendiente".equals(normalizar(solicitud.getEstado()))) {
+            throw new RuntimeException("409: La documentacion no fue requerida o el caso ya fue resuelto");
+        }
+        for (MultipartFile archivo : archivos) {
+            if (!archivoValido(archivo)) {
+                throw new RuntimeException("400: Sin archivos o formato invalido");
+            }
+        }
+
+        for (MultipartFile archivo : archivos) {
+            DocumentoConsignacion documento = new DocumentoConsignacion();
+            documento.setSolicitud(solicitud);
+            documento.setNombreArchivo(nombreArchivo(archivo));
+            documento.setDescripcion(descripcion);
+            documento.setFechaCarga(LocalDateTime.now());
+            documento.setEstado("pendiente");
+            try {
+                documento.setUrlArchivo(cloudinaryService.subirArchivo(archivo));
+            } catch (IOException e) {
+                throw new RuntimeException("500: Error interno del servidor");
+            }
+            documentoRepository.save(documento);
+        }
+        solicitud.setEstado("documentacion_presentada");
+        solicitudRepository.save(solicitud);
         return new MensajeResponse("Documentacion recibida correctamente");
     }
 
@@ -237,12 +266,14 @@ public class ConsignacionService {
         response.setIdentificador(solicitud.getIdentificador());
         response.setEstado(solicitud.getEstado());
         response.setMotivoRechazo(solicitud.getMotivoRechazo());
+        response.setMotivoDocumentacion(solicitud.getMotivoDocumentacion());
         response.setCondicionesAceptadas("si".equals(normalizar(solicitud.getCondicionesAceptadas())));
         response.setFechaSolicitud(solicitud.getFechaSolicitud());
         response.setProducto(aProductoDto(producto));
         response.setCondicionesEmpresa(aCondicionesDto(solicitud, seguro, item));
         response.setUbicacionDeposito(aUbicacionDto(deposito));
         response.setSeguro(aSeguroDto(seguro, item));
+        response.setDocumentosOrigen(aDocumentosDto(solicitud));
         response.setInstancias(aInstanciasDto(solicitud, deposito, seguro, item));
         return response;
     }
@@ -309,6 +340,12 @@ public class ConsignacionService {
                 : "--";
         boolean aceptado = "aceptado".equals(normalizar(solicitud.getEstado()));
         boolean rechazado = "rechazado".equals(normalizar(solicitud.getEstado()));
+        boolean documentacionPendiente =
+                "documentacion_pendiente".equals(normalizar(solicitud.getEstado()));
+        boolean documentacionPresentada =
+                "documentacion_presentada".equals(normalizar(solicitud.getEstado()));
+        boolean inspeccionPendiente =
+                "pendiente".equals(normalizar(solicitud.getEstado()));
         boolean condiciones = "si".equals(normalizar(solicitud.getCondicionesAceptadas()));
         boolean recibido = deposito != null;
         boolean inspeccionado = aceptado || rechazado;
@@ -318,7 +355,20 @@ public class ConsignacionService {
         List<ConsignacionResponse.InstanciaDTO> instancias = new ArrayList<>();
         instancias.add(new ConsignacionResponse.InstanciaDTO("Solicitud enviada", fecha, true, false));
         instancias.add(new ConsignacionResponse.InstanciaDTO(
-                "Recibido en deposito", recibido ? fecha : "--", recibido, recibido && !inspeccionado));
+                "Recibido en deposito", recibido ? fecha : "--", recibido,
+                recibido && inspeccionPendiente));
+        if (rechazado) {
+            instancias.add(new ConsignacionResponse.InstanciaDTO(
+                    "Consignacion rechazada", fecha, true, true));
+            return instancias;
+        }
+        if (documentacionPendiente || documentacionPresentada) {
+            instancias.add(new ConsignacionResponse.InstanciaDTO(
+                    "Documentacion de origen",
+                    documentacionPresentada ? fecha : "--",
+                    documentacionPresentada,
+                    documentacionPendiente || documentacionPresentada));
+        }
         instancias.add(new ConsignacionResponse.InstanciaDTO(
                 "Inspeccionado y aceptado", aceptado ? fecha : "--", aceptado,
                 inspeccionado && !rechazado && !condicionesDisponibles));
@@ -329,6 +379,41 @@ public class ConsignacionService {
                 "Asignacion a subasta", asignado ? fecha : "--", asignado,
                 condiciones && !asignado));
         return instancias;
+    }
+
+    private List<ConsignacionResponse.DocumentoDTO> aDocumentosDto(
+            SolicitudConsignacion solicitud) {
+        return documentoRepository
+                .findBySolicitudIdentificadorOrderByFechaCargaAsc(
+                        solicitud.getIdentificador())
+                .stream()
+                .map(documento -> {
+                    ConsignacionResponse.DocumentoDTO dto =
+                            new ConsignacionResponse.DocumentoDTO();
+                    dto.setIdentificador(documento.getIdentificador());
+                    dto.setNombreArchivo(documento.getNombreArchivo());
+                    dto.setUrlArchivo(documento.getUrlArchivo());
+                    dto.setDescripcion(documento.getDescripcion());
+                    dto.setFechaCarga(documento.getFechaCarga());
+                    dto.setEstado(documento.getEstado());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private boolean archivoValido(MultipartFile archivo) {
+        if (archivo == null || archivo.isEmpty()) return false;
+        String tipo = archivo.getContentType();
+        if (tipo == null) return false;
+        String normalizado = tipo.toLowerCase(Locale.ROOT);
+        return normalizado.startsWith("image/")
+                || "application/pdf".equals(normalizado);
+    }
+
+    private String nombreArchivo(MultipartFile archivo) {
+        String nombre = archivo.getOriginalFilename();
+        if (nombre == null || nombre.isBlank()) return "documento";
+        return nombre.length() <= 250 ? nombre : nombre.substring(nombre.length() - 250);
     }
 
     private Seguro buscarSeguro(Producto producto) {

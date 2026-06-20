@@ -33,7 +33,9 @@ python scripts/consignaciones/gestionar_consignaciones.py --id 12
 ## Instancias
 
 - `Solicitud enviada`: pide el deposito.
-- `Recibido en deposito`: pide aceptar o rechazar la inspeccion.
+- `Recibido en deposito`: permite aceptar, rechazar o solicitar documentación.
+- `Documentacion pendiente`: espera que el dueño adjunte archivos desde Android.
+- `Documentacion presentada`: muestra los archivos para aprobarlos o rechazar el bien.
 - `Inspeccionado y aceptado`: pide subasta, precio base, comision y seguro.
 - Si no existe una subasta pendiente, permite crearla con su catalogo desde el
   mismo asistente.

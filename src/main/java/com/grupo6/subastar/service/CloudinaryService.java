@@ -26,4 +26,17 @@ public class CloudinaryService {
         // Retorna la URL segura (https)
         return uploadResult.get("secure_url").toString();
     }
+
+    public String subirArchivo(MultipartFile archivo) throws IOException {
+        if (archivo == null || archivo.isEmpty()) {
+            return null;
+        }
+        String tipoRecurso = "application/pdf".equalsIgnoreCase(archivo.getContentType())
+                ? "raw"
+                : "image";
+        Map uploadResult = cloudinary.uploader().upload(
+                archivo.getBytes(),
+                ObjectUtils.asMap("resource_type", tipoRecurso));
+        return uploadResult.get("secure_url").toString();
+    }
 }
