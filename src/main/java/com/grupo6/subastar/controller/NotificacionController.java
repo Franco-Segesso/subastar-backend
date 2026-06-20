@@ -54,4 +54,15 @@ public class NotificacionController {
 
         return ResponseEntity.ok(response);
     }
+
+    @Autowired
+    private com.grupo6.subastar.service.FirebasePushService firebasePushService;
+
+    // Endpoint temporal para probar Firebase
+    @GetMapping("/test-push")
+    public ResponseEntity<String> probarPush() {
+        // IMPORTANTE: Cambiá este '1' por el ID de tu usuario con el que estés logueado en la app
+        firebasePushService.enviarNotificacionPush(6, "¡Magia de Firebase!", "Tu notificación Heads-up funciona perfecto, incluso con la app cerrada.");
+        return ResponseEntity.ok("Push disparado a Firebase");
+    }
 }

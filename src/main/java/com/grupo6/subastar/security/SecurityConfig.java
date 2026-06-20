@@ -58,6 +58,7 @@ public class SecurityConfig {
                     .requestMatchers("/paises").permitAll()  // Le sacamos el /v1
                     .requestMatchers(HttpMethod.GET, "/subastas", "/subastas/*", "/subastas/*/items/*").permitAll()
                     .requestMatchers("/subastar-ws/**").permitAll() // WebSocket de subasta
+                    .requestMatchers("/clientes/me/notificaciones/test-push").permitAll() //test, despues se saca esto.
                     .anyRequest().authenticated()              
             );
 

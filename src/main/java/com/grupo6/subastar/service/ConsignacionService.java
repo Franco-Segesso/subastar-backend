@@ -73,6 +73,8 @@ public class ConsignacionService {
     private DocumentoConsignacionRepository documentoRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
+    @Autowired
+    private NotificacionesReactivasService notificacionesReactivasService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -138,6 +140,12 @@ public class ConsignacionService {
         solicitud.setCondicionesAceptadas("no");
         solicitud.setFechaSolicitud(LocalDateTime.now());
         solicitud = solicitudRepository.save(solicitud);
+
+        notificacionesReactivasService.notificarConsignacionEnviada(
+            cliente,
+            solicitud.getProducto().getDescripcion(),
+            solicitud.getIdentificador()
+        );
         return aResponse(solicitud);
     }
 
@@ -165,14 +173,25 @@ public class ConsignacionService {
             throw new RuntimeException("400: Solicitud invalida");
         }
 
+        // CASO 1: EL CLIENTE ACEPTA LAS CONDICIONES
         if (request.getAcepta()) {
             solicitud.setCondicionesAceptadas("si");
             solicitud.getProducto().setDisponible("si");
             productoRepository.save(solicitud.getProducto());
             solicitudRepository.save(solicitud);
+            
+            //Disparo de notificación de Éxito
+            notificacionesReactivasService.notificarAceptacionOfertaCliente(
+                    cliente,
+                    solicitud.getProducto().getDescripcion(), // Obtiene el nombre del bien
+                    solicitud.getFechaSolicitud().toString(),
+                    solicitud.getIdentificador()
+            );
+
             return new MensajeResponse("Respuesta registrada correctamente");
         }
 
+        // CASO 2: EL CLIENTE RECHAZA LAS CONDICIONES
         ItemCatalogo itemReservado = buscarItemCatalogo(solicitud.getProducto());
         registrarCostoDevolucion(solicitud, itemReservado);
         if (itemReservado != null && !"si".equals(normalizar(itemReservado.getSubastado()))) {
@@ -184,6 +203,25 @@ public class ConsignacionService {
         solicitud.getProducto().setDisponible("no");
         productoRepository.save(solicitud.getProducto());
         solicitudRepository.save(solicitud);
+
+        // NUEVO: Disparo de notificación de Devolución
+        // La consigna exige informar sucursal de retiro y cargo por devolución
+        Deposito deposito = buscarDeposito(solicitud.getProducto());
+        String sucursalRetiro = deposito == null
+                ? "la sucursal indicada por la casa de subastas"
+                : deposito.getNombre() + " - " + deposito.getDireccion();
+        double cargoDevolucion = solicitud.getCostoDevolucion() == null
+                ? 0.0 : solicitud.getCostoDevolucion().doubleValue();
+
+        notificacionesReactivasService.notificarOfertaRechazadaPorCliente(
+                cliente,
+                solicitud.getProducto().getDescripcion(), // Obtiene el nombre del bien
+                sucursalRetiro,
+                cargoDevolucion,
+                solicitud.getMonedaDevolucion(),
+                solicitud.getIdentificador()
+        );
+
         return new MensajeResponse("Respuesta registrada correctamente");
     }
 

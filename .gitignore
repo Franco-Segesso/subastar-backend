@@ -26,6 +26,7 @@ target/
 /nbdist/
 /.nb-gradle/
 build/
+firebase-admin-key.json
 !**/src/main/**/build/
 !**/src/test/**/build/
 

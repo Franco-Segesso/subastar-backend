@@ -48,6 +48,10 @@ public class SubastaService {
     private NotificacionService notificacionService;
     @Autowired
     private MultaService multaService;
+    @Autowired
+    private FirebasePushService firebasePushService;
+    @Autowired
+    private NotificacionesReactivasService notificacionesReactivasService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -300,12 +304,26 @@ public class SubastaService {
             respuesta.setImporteFinal(ganadora.getImporte());
             respuesta.setCompraId(compra.getIdentificador());
 
-            notificacionService.crearNotificacion(
-                ganadora.getAsistente().getCliente(),
-                "Subasta ganada",
-                "Felicitaciones. Ganaste el item #" + itemId + ". Tenes 24 horas para abonarlo.",
-                TipoNotificacion.GANADA,
-                itemId
+            double valorPujado = ganadora.getImporte();
+            double comisiones = valorPujado * 0.15; // Ejemplo: 15% de comisión
+            double costoEnvio = 5000.0; // O la lógica que usen para envíos
+
+            // --- DISPARO: SUBASTA GANADA ---
+            notificacionesReactivasService.notificarSubastaGanada(
+                    ganadora.getAsistente().getCliente(),
+                    ganadora.getAsistente().getCliente().getPersona().getNombre(),
+                    valorPujado,
+                    comisiones,
+                    costoEnvio,
+                    compra.getIdentificador()
+            );
+
+            notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                item.getProducto().getDuenio(), 
+                item.getProducto().getDescripcion(), 
+                valorPujado, 
+                comisiones, 
+                item.getId()
             );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
@@ -313,7 +331,19 @@ public class SubastaService {
             item.setPrecioFinal(item.getPrecioBase()); 
             respuesta.setHayGanador(false);
             respuesta.setImporteFinal(item.getPrecioBase());
+
+            double comisiones = item.getPrecioFinal() * 0.15;
+            
+            notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                item.getProducto().getDuenio(), 
+                item.getProducto().getDescripcion(), 
+                item.getPrecioFinal(), 
+                comisiones, 
+                item.getId()
+            );
         }
+
+        
         
         itemCatalogoRepository.saveAndFlush(item);
 
