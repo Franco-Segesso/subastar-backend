@@ -39,6 +39,11 @@ public class Persona {
     @Column(name = "fotoDorso", length = 500)
     private String fotoDorso;
 
+    @Column(name = "foto", length = 500)
+    private String fotoPerfil;
+
+    
+
     // Constructores
     public Persona() {}
 
@@ -73,4 +78,7 @@ public class Persona {
 
     public String getFotoDorso() { return fotoDorso; }
     public void setFotoDorso(String fotoDorso) { this.fotoDorso = fotoDorso; }
+
+    public String getFotoPerfil() { return fotoPerfil; }
+    public void setFotoPerfil(String fotoPerfil) { this.fotoPerfil = fotoPerfil; }
 }

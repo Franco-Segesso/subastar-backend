@@ -37,7 +37,7 @@ public class Cliente {
     @Column(name = "fechaAprobacion")
     private LocalDate fechaAprobacion;
 
-  
+   
 
     
 
@@ -71,6 +71,7 @@ public class Cliente {
     public LocalDate getFechaAprobacion() { return fechaAprobacion; }
     public void setFechaAprobacion(LocalDate fechaAprobacion) { this.fechaAprobacion = fechaAprobacion; }
 
+    
 
     
     
