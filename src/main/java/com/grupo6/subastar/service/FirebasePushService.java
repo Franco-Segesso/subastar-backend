@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 public class FirebasePushService {
 
     public void enviarNotificacionPush(Integer clienteId, String titulo, String mensaje) {
-        // Le enviamos al "Tópico" al que se suscribió el celular
         String topic = "cliente_" + clienteId;
 
         Message pushMessage = Message.builder()
@@ -18,8 +17,14 @@ public class FirebasePushService {
                 .build();
 
         try {
-            FirebaseMessaging.getInstance().sendAsync(pushMessage);
+            System.out.println(">> Intentando enviar push al canal: " + topic);
+            
+            // CAMBIO CLAVE: Usamos send() síncrono para que frene y nos dé la respuesta exacta
+            String response = FirebaseMessaging.getInstance().send(pushMessage);
+            
+            System.out.println("✅ EXITO FIREBASE: Mensaje entregado a los servidores de Google. ID: " + response);
         } catch (Exception e) {
+            System.err.println("❌ ERROR FIREBASE: Google rechazó el mensaje. Motivo exacto:");
             e.printStackTrace();
         }
     }

@@ -51,6 +51,8 @@ public class ConsignacionService {
     private CuentaBancariaRepository cuentaBancariaRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
+    @Autowired
+    private NotificacionesReactivasService notificacionesReactivasService;
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -116,6 +118,12 @@ public class ConsignacionService {
         solicitud.setCondicionesAceptadas("no");
         solicitud.setFechaSolicitud(LocalDateTime.now());
         solicitud = solicitudRepository.save(solicitud);
+
+        notificacionesReactivasService.notificarConsignacionEnviada(
+            cliente, 
+            solicitud.getProducto().getDescripcion(),
+            solicitud.getIdentificador()
+        );
         return aResponse(solicitud);
     }
 
@@ -143,16 +151,42 @@ public class ConsignacionService {
             throw new RuntimeException("400: Solicitud invalida");
         }
 
+        // CASO 1: EL CLIENTE ACEPTA LAS CONDICIONES
         if (request.getAcepta()) {
             solicitud.setCondicionesAceptadas("si");
             solicitudRepository.save(solicitud);
+            
+            //Disparo de notificación de Éxito
+            notificacionesReactivasService.notificarAceptacionOfertaCliente(
+                    cliente,
+                    solicitud.getProducto().getDescripcion(), // Obtiene el nombre del bien
+                    solicitud.getFechaSolicitud().toString(),
+                    solicitud.getIdentificador()
+            );
+
             return new MensajeResponse("Respuesta registrada correctamente");
         }
 
+
+        // CASO 2: EL CLIENTE RECHAZA LAS CONDICIONES
         solicitud.setEstado("rechazado");
         solicitud.setMotivoRechazo("Condiciones rechazadas por el cliente");
         solicitud.setCondicionesAceptadas("no");
         solicitudRepository.save(solicitud);
+
+        // NUEVO: Disparo de notificación de Devolución
+        // La consigna exige informar sucursal de retiro y cargo por devolución
+        String sucursalRetiro = "Casa Central de SubastAR - Juana Manso 1560";
+        double cargoDevolucion = 5000.0;
+
+        notificacionesReactivasService.notificarOfertaRechazadaPorCliente(
+                cliente,
+                solicitud.getProducto().getDescripcion(), // Obtiene el nombre del bien
+                sucursalRetiro,
+                cargoDevolucion,
+                solicitud.getIdentificador()
+        );
+
         return new MensajeResponse("Respuesta registrada correctamente");
     }
 

@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
-public class VigilanteVencimientosService {
+public class MultasSchedulerService {
 
     @Autowired
     private NotificacionService notificacionService;
