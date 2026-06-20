@@ -12,15 +12,15 @@ public class NotificacionesReactivasService {
 
     @Autowired
     private FirebasePushService firebasePushService;
+    
     @Autowired
     private NotificacionService notificacionService;
+    
     @Autowired
     private ClienteRepository clienteRepository;
-    // @Autowired
-    // private NotificacionService notificacionService; // El que guarda en tu BD de Azure
 
     // =================================================================================
-    // 1. EL CLIENTE GANA EN LA SALA DE PUJA
+    // 1. EL CLIENTE GANA EN LA SALA DE PUJA (Desde Backend)
     // =================================================================================
     public void notificarSubastaGanada(Cliente cliente, String nombreItem, double pujaGanadora, double comisiones, double costoEnvio, Integer referenciaId) {
         double totalAPagar = pujaGanadora + comisiones + costoEnvio;
@@ -33,15 +33,12 @@ public class NotificacionesReactivasService {
             nombreItem, pujaGanadora, comisiones, costoEnvio, totalAPagar
         );
 
-        // Guardamos en la base de datos (con el ID de la compra/ítem ganado como referencia)
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
-
-        // Disparamos la Push
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
     }
 
     // =================================================================================
-    // NOTIFICAR AL VENDEDOR QUE SU BIEN SE VENDIÓ
+    // 2. NOTIFICAR AL VENDEDOR QUE SU BIEN SE VENDIÓ (Desde Backend)
     // =================================================================================
     public void notificarBienVendidoAlDuenio(Integer idDuenio, String nombreBien, double precioFinal, double comisionCasa, Integer referenciaId) {
         Cliente duenio = clienteRepository.findById(idDuenio)
@@ -59,61 +56,59 @@ public class NotificacionesReactivasService {
             nombreBien, precioFinal, comisionCasa, netoAGanar
         );
 
-        // Guardamos en la BD de Azure para el historial del vendedor
         notificacionService.crearNotificacion(duenio, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
-        
-        // Disparamos la Push al celular del vendedor
         firebasePushService.enviarNotificacionPush(duenio.getIdentificador(), titulo, mensajePush);
     }
 
     // =================================================================================
-    // 2. EL CLIENTE CONSIGNA UN BIEN (Enviado a revisión)
+    // 3. EL CLIENTE CONSIGNA UN BIEN (Desde Backend)
     // =================================================================================
     public void notificarConsignacionEnviada(Cliente cliente, String nombreBien, Integer referenciaId) {
         String titulo = "Consignación en Revisión";
         String mensaje = "Hemos recibido el formulario de tu artículo '" + nombreBien + "'. Nuestros expertos lo están evaluando.";
 
-        // 1. Guardamos en la base de datos de Azure (ahora le pasamos el objeto Cliente entero y la referencia)
         notificacionService.crearNotificacion(cliente, titulo, mensaje, TipoNotificacion.INFORMATIVA, referenciaId);
-        
-        // 2. Disparamos la Push al celular
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensaje);
     }
 
     // =================================================================================
-    // 3. EL BIEN ES RECHAZADO POR LA CASA (Vía Script)
+    // 4. EL BIEN ES RECHAZADO POR LA CASA (Vía Script)
     // =================================================================================
-    public void notificarBienRechazado(Cliente cliente, String nombreBien, String motivoRechazo) {
+    public void notificarBienRechazado(Integer idCliente, String nombreBien, String motivoRechazo, Integer referenciaId) {
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idCliente));
+
         String titulo = "Actualización de Consignación";
         String mensajePush = "Lamentablemente tu artículo '" + nombreBien + "' no fue aceptado. Toca para ver los detalles.";
         
-        // La consigna exige informar las causas del rechazo y recordar que la devolución tiene cargo
         String detalleBd = "Tras la inspección, tu artículo '" + nombreBien + "' ha sido rechazado.\n\nMotivo: " + motivoRechazo + 
                            "\n\nTe recordamos que, tal como aceptaste en los términos, el bien te será devuelto a tu domicilio con cargo a tu cuenta.";
 
-        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, null);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
     }
 
     // =================================================================================
-    // 4. EL BIEN ES ACEPTADO - SE LE ENVÍA LA OFERTA AL CLIENTE (Vía Script)
+    // 5. EL BIEN ES ACEPTADO - SE LE ENVÍA LA OFERTA AL CLIENTE (Vía Script)
     // =================================================================================
-    public void notificarOfertaDeLaCasa(Integer idCliente, String nombreBien, double valorBase, double comisionPorcentaje, String fecha, String hora, String lugar) {
+    public void notificarOfertaDeLaCasa(Integer idCliente, String nombreBien, double valorBase, double comisionPorcentaje, String fecha, String hora, String lugar, Integer referenciaId) {
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idCliente));
+
         String titulo = "¡Artículo Aceptado!";
         String mensajePush = "Tenemos una propuesta para subastar tu '" + nombreBien + "'. Revisa los términos.";
         
-        // La consigna exige informar fecha, hora, lugar, valor base y comisiones
         String detalleBd = String.format(
             "¡Tu artículo '%s' ha sido aprobado para subasta!\n\nCondiciones propuestas:\n- Valor Base: $%.2f\n- Comisión de la casa: %.1f%%\n\nLa subasta se realizará el %s a las %s en %s.\n\nPor favor, ingresa a la app para ACEPTAR o RECHAZAR estas condiciones.",
             nombreBien, valorBase, comisionPorcentaje, fecha, hora, lugar
         );
 
-        // notificacionService.crearNotificacion(idCliente, titulo, detalleBd, TipoNotificacion.ACCION_REQUERIDA);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
         firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
     }
 
     // =================================================================================
-    // 5. EL CLIENTE RECHAZA LA OFERTA DE LA CASA
+    // 6. EL CLIENTE RECHAZA LA OFERTA DE LA CASA (Desde Backend)
     // =================================================================================
     public void notificarOfertaRechazadaPorCliente(Cliente cliente, String nombreBien, String sucursalRetiro, double cargoDevolucion, Integer referenciaId) {
         String titulo = "Devolución de Artículo";
@@ -124,42 +119,44 @@ public class NotificacionesReactivasService {
             nombreBien, sucursalRetiro, cargoDevolucion
         );
 
-        // Guardamos en la base de datos
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.INFORMATIVA, referenciaId);
-        
-        // Disparamos la Push al celular
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
     }
 
     // =================================================================================
-    // 6. PEDIDO DE DOCUMENTACIÓN (Ejecutado por el Script)
+    // 7. PEDIDO DE DOCUMENTACIÓN (Vía Script)
     // =================================================================================
-    public void notificarPedidoDocumentacion(Integer idCliente, String nombreBien) {
+    public void notificarPedidoDocumentacion(Integer idCliente, String nombreBien, Integer referenciaId) {
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idCliente));
+
         String titulo = "Documentación Requerida";
         String mensajePush = "Necesitamos verificar el origen de '" + nombreBien + "'. Toca para más info.";
         
-        // El TP exige "poder acreditar el origen licito de los bienes"
         String detalleBd = "Para avanzar con la evaluación de tu artículo '" + nombreBien + "', la casa de subastas requiere que adjuntes la documentación que acredite su origen lícito.\n\nPor favor, ingresa al detalle de tu consignación para subir los archivos correspondientes.";
 
-        // notificacionService.crearNotificacion(idCliente, titulo, detalleBd, TipoNotificacion.ACCION_REQUERIDA);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
         firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
     }
 
     // =================================================================================
-    // 7. RECEPCIÓN EN SUCURSAL (Ejecutado por el Script)
+    // 8. RECEPCIÓN EN SUCURSAL (Vía Script)
     // =================================================================================
-    public void notificarRecepcionSucursal(Integer idCliente, String nombreBien, String sucursal) {
+    public void notificarRecepcionSucursal(Integer idCliente, String nombreBien, String sucursal, Integer referenciaId) {
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idCliente));
+
         String titulo = "Artículo Recibido";
         String mensajePush = "Tenemos tu '" + nombreBien + "' en nuestra sucursal. Iniciaremos la inspección.";
         
         String detalleBd = "Te confirmamos que hemos recibido tu artículo '" + nombreBien + "' en nuestra sucursal de " + sucursal + ".\n\nNuestros expertos procederán con la inspección física. Te notificaremos a la brevedad si el bien es aceptado para subasta y las condiciones de la misma.";
 
-        // notificacionService.crearNotificacion(idCliente, titulo, detalleBd, TipoNotificacion.INFO);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
         firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
     }
 
     // =================================================================================
-    // 8. ACEPTACIÓN DE LA OFERTA POR EL CLIENTE (Confirmación final)
+    // 9. ACEPTACIÓN DE LA OFERTA POR EL CLIENTE (Desde Backend)
     // =================================================================================
     public void notificarAceptacionOfertaCliente(Cliente cliente, String nombreBien, String fechaSubasta, Integer referenciaId) {
         String titulo = "¡Subasta Confirmada!";
@@ -167,10 +164,7 @@ public class NotificacionesReactivasService {
         
         String detalleBd = "Has aceptado exitosamente las condiciones, el valor base y las comisiones para tu artículo '" + nombreBien + "'.\n\nEl mismo ha sido formalmente incluido en el catálogo y será subastado el día " + fechaSubasta + ". Podrás seguir el evento en vivo desde la aplicación.";
 
-        // Guardamos en la base de datos
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.INFORMATIVA, referenciaId);
-        
-        // Disparamos la Push al celular
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
     }
 }

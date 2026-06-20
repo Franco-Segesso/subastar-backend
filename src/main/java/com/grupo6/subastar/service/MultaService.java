@@ -39,6 +39,7 @@ public class MultaService {
     private final SubastaRepository subastaRepository;
     private final MedioPagoService medioPagoService;
     private final NotificacionService notificacionService;
+    private final FirebasePushService firebasePushService;
 
     public MultaService(
             MultaRepository multaRepository,
@@ -47,7 +48,8 @@ public class MultaService {
             RegistroSubastaRepository registroRepository,
             SubastaRepository subastaRepository,
             MedioPagoService medioPagoService,
-            NotificacionService notificacionService) {
+            NotificacionService notificacionService,
+            FirebasePushService firebasePushService) {
         this.multaRepository = multaRepository;
         this.clienteRepository = clienteRepository;
         this.pujaRepository = pujaRepository;
@@ -55,6 +57,7 @@ public class MultaService {
         this.subastaRepository = subastaRepository;
         this.medioPagoService = medioPagoService;
         this.notificacionService = notificacionService;
+        this.firebasePushService = firebasePushService;
     }
 
     @Transactional(readOnly = true)
@@ -141,6 +144,12 @@ public class MultaService {
                             + ". Tenes 72 horas para presentar los fondos.",
                     TipoNotificacion.MULTA,
                     multa.getIdentificador());
+            
+            firebasePushService.enviarNotificacionPush(
+                    cliente.getIdentificador(),
+                    "Multa por falta de pago",
+                    "Venció el plazo de 24hs para el ítem #" + puja.getItemCatalogo().getId() + ". Se te ha aplicado una multa del 10%."
+            );
         }
     }
 
@@ -163,6 +172,24 @@ public class MultaService {
             if (multa.getCliente().getPersona() != null) {
                 multa.getCliente().getPersona().setEstado("inactivo");
             }
+
+            //NOTIFICACION DE BLOQUEO POR MULTA VENCIDA
+            String mensajeBloqueo = "El plazo de 72hs para regularizar tu deuda ha vencido. Tu cuenta ha sido bloqueada y el caso derivado al departamento legal.";
+            
+            notificacionService.crearNotificacion(
+                    multa.getCliente(),
+                    "Cuenta Suspendida",
+                    mensajeBloqueo,
+                    TipoNotificacion.MULTA, // O el tipo que usen para bloqueos/alertas
+                    multa.getIdentificador()
+            );
+
+            firebasePushService.enviarNotificacionPush(
+                    multa.getCliente().getIdentificador(),
+                    "Cuenta Suspendida",
+                    "Plazo de 72hs vencido. Tu cuenta ha sido inactivada."
+            );
+            
         }
     }
 

@@ -306,7 +306,7 @@ public class SubastaService {
 
             double valorPujado = ganadora.getImporte();
             double comisiones = valorPujado * 0.15; // Ejemplo: 15% de comisión
-            double costoEnvio = 8500.0; // O la lógica que usen para envíos
+            double costoEnvio = 5000.0; // O la lógica que usen para envíos
 
             // --- DISPARO: SUBASTA GANADA ---
             notificacionesReactivasService.notificarSubastaGanada(
