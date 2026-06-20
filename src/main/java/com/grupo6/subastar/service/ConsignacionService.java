@@ -7,14 +7,20 @@ import com.grupo6.subastar.dto.RespuestaConsignacionRequest;
 import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.CuentaBancaria;
 import com.grupo6.subastar.model.Duenio;
+import com.grupo6.subastar.model.Deposito;
 import com.grupo6.subastar.model.Foto;
+import com.grupo6.subastar.model.ItemCatalogo;
 import com.grupo6.subastar.model.Producto;
+import com.grupo6.subastar.model.Seguro;
 import com.grupo6.subastar.model.SolicitudConsignacion;
 import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.CuentaBancariaRepository;
 import com.grupo6.subastar.repository.DuenioRepository;
+import com.grupo6.subastar.repository.DepositoRepository;
 import com.grupo6.subastar.repository.FotoRepository;
+import com.grupo6.subastar.repository.ItemCatalogoRepository;
 import com.grupo6.subastar.repository.ProductoRepository;
+import com.grupo6.subastar.repository.SeguroRepository;
 import com.grupo6.subastar.repository.SolicitudConsignacionRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -49,6 +55,12 @@ public class ConsignacionService {
     private SolicitudConsignacionRepository solicitudRepository;
     @Autowired
     private CuentaBancariaRepository cuentaBancariaRepository;
+    @Autowired
+    private SeguroRepository seguroRepository;
+    @Autowired
+    private DepositoRepository depositoRepository;
+    @Autowired
+    private ItemCatalogoRepository itemCatalogoRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
     @PersistenceContext
@@ -145,13 +157,21 @@ public class ConsignacionService {
 
         if (request.getAcepta()) {
             solicitud.setCondicionesAceptadas("si");
+            solicitud.getProducto().setDisponible("si");
+            productoRepository.save(solicitud.getProducto());
             solicitudRepository.save(solicitud);
             return new MensajeResponse("Respuesta registrada correctamente");
         }
 
+        ItemCatalogo itemReservado = buscarItemCatalogo(solicitud.getProducto());
+        if (itemReservado != null && !"si".equals(normalizar(itemReservado.getSubastado()))) {
+            itemCatalogoRepository.delete(itemReservado);
+        }
         solicitud.setEstado("rechazado");
         solicitud.setMotivoRechazo("Condiciones rechazadas por el cliente");
         solicitud.setCondicionesAceptadas("no");
+        solicitud.getProducto().setDisponible("no");
+        productoRepository.save(solicitud.getProducto());
         solicitudRepository.save(solicitud);
         return new MensajeResponse("Respuesta registrada correctamente");
     }
@@ -209,6 +229,9 @@ public class ConsignacionService {
 
     private ConsignacionResponse aResponse(SolicitudConsignacion solicitud) {
         Producto producto = solicitud.getProducto();
+        Seguro seguro = buscarSeguro(producto);
+        Deposito deposito = buscarDeposito(producto);
+        ItemCatalogo item = buscarItemCatalogo(producto);
 
         ConsignacionResponse response = new ConsignacionResponse();
         response.setIdentificador(solicitud.getIdentificador());
@@ -217,10 +240,10 @@ public class ConsignacionService {
         response.setCondicionesAceptadas("si".equals(normalizar(solicitud.getCondicionesAceptadas())));
         response.setFechaSolicitud(solicitud.getFechaSolicitud());
         response.setProducto(aProductoDto(producto));
-        response.setCondicionesEmpresa(aCondicionesDto(solicitud));
-        response.setUbicacionDeposito(aUbicacionDto());
-        response.setSeguro(aSeguroDto());
-        response.setInstancias(aInstanciasDto(solicitud));
+        response.setCondicionesEmpresa(aCondicionesDto(solicitud, seguro, item));
+        response.setUbicacionDeposito(aUbicacionDto(deposito));
+        response.setSeguro(aSeguroDto(seguro, item));
+        response.setInstancias(aInstanciasDto(solicitud, deposito, seguro, item));
         return response;
     }
 
@@ -238,47 +261,107 @@ public class ConsignacionService {
         return dto;
     }
 
-    private ConsignacionResponse.CondicionesEmpresaDTO aCondicionesDto(SolicitudConsignacion solicitud) {
+    private ConsignacionResponse.CondicionesEmpresaDTO aCondicionesDto(
+            SolicitudConsignacion solicitud,
+            Seguro seguro,
+            ItemCatalogo item) {
         if (!"aceptado".equals(normalizar(solicitud.getEstado()))) return null;
         ConsignacionResponse.CondicionesEmpresaDTO dto = new ConsignacionResponse.CondicionesEmpresaDTO();
-        dto.setPrecioBase(3000.0);
-        dto.setComisionEmpresa(10.0);
-        dto.setSeguroPoliza("USD 60/mes");
-        dto.setContactoPoliza("+54 9 11 2380-1603");
-        dto.setSubastaAsignada("15 Abr 2026");
+        dto.setPrecioBase(item == null ? null : item.getPrecioBase());
+        dto.setComisionEmpresa(item == null ? null : item.getComision());
+        dto.setSeguroPoliza(seguro == null ? null : seguro.getNroPoliza());
+        dto.setContactoPoliza(seguro == null ? null : seguro.getCompania());
+        dto.setSubastaAsignada(describirSubasta(item));
+        dto.setMoneda(monedaSubasta(item));
         return dto;
     }
 
-    private ConsignacionResponse.UbicacionDepositoDTO aUbicacionDto() {
+    private ConsignacionResponse.UbicacionDepositoDTO aUbicacionDto(Deposito deposito) {
+        if (deposito == null) return null;
         ConsignacionResponse.UbicacionDepositoDTO dto = new ConsignacionResponse.UbicacionDepositoDTO();
-        dto.setNombre("Deposito Central Norte");
-        dto.setDireccion("Av. Del Libertador 8500, CABA - Sector B - Estante 14");
+        dto.setNombre(deposito.getNombre());
+        String direccion = deposito.getDireccion();
+        if (!esBlanco(deposito.getSector())) {
+            direccion += " - " + deposito.getSector();
+        }
+        dto.setDireccion(direccion);
         return dto;
     }
 
-    private ConsignacionResponse.SeguroDTO aSeguroDto() {
+    private ConsignacionResponse.SeguroDTO aSeguroDto(Seguro seguro, ItemCatalogo item) {
+        if (seguro == null) return null;
         ConsignacionResponse.SeguroDTO dto = new ConsignacionResponse.SeguroDTO();
-        dto.setNroPoliza("POL-DAI-2026");
-        dto.setCompania("Subastar Seguros");
-        dto.setImporte(60.0);
+        dto.setNroPoliza(seguro.getNroPoliza());
+        dto.setCompania(seguro.getCompania());
+        dto.setImporte(seguro.getImporte() == null ? null : seguro.getImporte().doubleValue());
+        dto.setPolizaCombinada(seguro.getPolizaCombinada());
+        dto.setMoneda(monedaSubasta(item));
         return dto;
     }
 
-    private List<ConsignacionResponse.InstanciaDTO> aInstanciasDto(SolicitudConsignacion solicitud) {
+    private List<ConsignacionResponse.InstanciaDTO> aInstanciasDto(
+            SolicitudConsignacion solicitud,
+            Deposito deposito,
+            Seguro seguro,
+            ItemCatalogo item) {
         String fecha = solicitud.getFechaSolicitud() != null
                 ? solicitud.getFechaSolicitud().format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US))
                 : "--";
         boolean aceptado = "aceptado".equals(normalizar(solicitud.getEstado()));
         boolean rechazado = "rechazado".equals(normalizar(solicitud.getEstado()));
         boolean condiciones = "si".equals(normalizar(solicitud.getCondicionesAceptadas()));
+        boolean recibido = deposito != null;
+        boolean inspeccionado = aceptado || rechazado;
+        boolean condicionesDisponibles = aceptado && seguro != null;
+        boolean asignado = condiciones && item != null;
 
         List<ConsignacionResponse.InstanciaDTO> instancias = new ArrayList<>();
         instancias.add(new ConsignacionResponse.InstanciaDTO("Solicitud enviada", fecha, true, false));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Recibido en deposito", aceptado || rechazado ? fecha : "--", aceptado || rechazado, false));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Inspeccionado y aceptado", aceptado ? fecha : "--", aceptado, aceptado && !condiciones));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Esperando aceptacion de condiciones", aceptado && condiciones ? fecha : "--", aceptado && condiciones, aceptado && !condiciones));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Asignacion a subasta", condiciones ? fecha : "--", condiciones, condiciones));
+        instancias.add(new ConsignacionResponse.InstanciaDTO(
+                "Recibido en deposito", recibido ? fecha : "--", recibido, recibido && !inspeccionado));
+        instancias.add(new ConsignacionResponse.InstanciaDTO(
+                "Inspeccionado y aceptado", aceptado ? fecha : "--", aceptado,
+                inspeccionado && !rechazado && !condicionesDisponibles));
+        instancias.add(new ConsignacionResponse.InstanciaDTO(
+                "Esperando aceptacion de condiciones", condiciones ? fecha : "--", condiciones,
+                condicionesDisponibles && !condiciones));
+        instancias.add(new ConsignacionResponse.InstanciaDTO(
+                "Asignacion a subasta", asignado ? fecha : "--", asignado,
+                condiciones && !asignado));
         return instancias;
+    }
+
+    private Seguro buscarSeguro(Producto producto) {
+        if (producto == null || esBlanco(producto.getSeguro())) return null;
+        return seguroRepository.findById(producto.getSeguro()).orElse(null);
+    }
+
+    private Deposito buscarDeposito(Producto producto) {
+        if (producto == null || producto.getDepositoActual() == null) return null;
+        return depositoRepository.findById(producto.getDepositoActual()).orElse(null);
+    }
+
+    private ItemCatalogo buscarItemCatalogo(Producto producto) {
+        if (producto == null || producto.getId() == null) return null;
+        List<ItemCatalogo> items = itemCatalogoRepository.findByProductoIdOrderByIdDesc(producto.getId());
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    private String describirSubasta(ItemCatalogo item) {
+        if (item == null || item.getCatalogo() == null || item.getCatalogo().getSubasta() == null) {
+            return null;
+        }
+        var subasta = item.getCatalogo().getSubasta();
+        String fecha = subasta.getFecha() == null ? "" : subasta.getFecha().toString();
+        String hora = subasta.getHora() == null ? "" : subasta.getHora().toString();
+        return (fecha + " " + hora).trim();
+    }
+
+    private String monedaSubasta(ItemCatalogo item) {
+        if (item == null || item.getCatalogo() == null || item.getCatalogo().getSubasta() == null) {
+            return null;
+        }
+        return item.getCatalogo().getSubasta().getMoneda();
     }
 
     private boolean esBlanco(String valor) {

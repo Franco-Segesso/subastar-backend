@@ -9,6 +9,7 @@ import com.grupo6.subastar.service.SubastaService;
 import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.ItemCatalogoRepository;
 import com.grupo6.subastar.repository.PujaRepository;
+import com.grupo6.subastar.repository.SeguroRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +32,9 @@ public class SubastaController {
 
     @Autowired
     private DuenioRepository duenioRepository;
+
+    @Autowired
+    private SeguroRepository seguroRepository;
 
     @Autowired
     private SubastaService subastaService;
@@ -113,8 +117,12 @@ public class SubastaController {
         ItemCatalogo item = itemOpt.get();
 
         if (item != null && item.getProducto() != null) {
-        asignarNombreDuenio(item.getProducto());
-    }
+            asignarNombreDuenio(item.getProducto());
+            String nroPoliza = item.getProducto().getSeguro();
+            if (nroPoliza != null && !nroPoliza.isBlank()) {
+                item.setSeguroDetalle(seguroRepository.findById(nroPoliza).orElse(null));
+            }
+        }
 
         // Ocultar precio base si no se provee token
         if (token == null || token.isEmpty()) {

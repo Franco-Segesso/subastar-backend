@@ -67,6 +67,7 @@ public class ConsignacionResponse {
         private String seguroPoliza;
         private String contactoPoliza;
         private String subastaAsignada;
+        private String moneda;
 
         public Double getPrecioBase() { return precioBase; }
         public void setPrecioBase(Double precioBase) { this.precioBase = precioBase; }
@@ -78,6 +79,8 @@ public class ConsignacionResponse {
         public void setContactoPoliza(String contactoPoliza) { this.contactoPoliza = contactoPoliza; }
         public String getSubastaAsignada() { return subastaAsignada; }
         public void setSubastaAsignada(String subastaAsignada) { this.subastaAsignada = subastaAsignada; }
+        public String getMoneda() { return moneda; }
+        public void setMoneda(String moneda) { this.moneda = moneda; }
     }
 
     public static class UbicacionDepositoDTO {
@@ -94,6 +97,8 @@ public class ConsignacionResponse {
         private String nroPoliza;
         private String compania;
         private Double importe;
+        private String polizaCombinada;
+        private String moneda;
 
         public String getNroPoliza() { return nroPoliza; }
         public void setNroPoliza(String nroPoliza) { this.nroPoliza = nroPoliza; }
@@ -101,6 +106,10 @@ public class ConsignacionResponse {
         public void setCompania(String compania) { this.compania = compania; }
         public Double getImporte() { return importe; }
         public void setImporte(Double importe) { this.importe = importe; }
+        public String getPolizaCombinada() { return polizaCombinada; }
+        public void setPolizaCombinada(String polizaCombinada) { this.polizaCombinada = polizaCombinada; }
+        public String getMoneda() { return moneda; }
+        public void setMoneda(String moneda) { this.moneda = moneda; }
     }
 
     public static class InstanciaDTO {

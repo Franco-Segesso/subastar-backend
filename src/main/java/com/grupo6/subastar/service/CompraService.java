@@ -177,13 +177,19 @@ public class CompraService {
     }
 
     private String avisoSeguro(String modalidad, String poliza) {
+        String referenciaPoliza = poliza == null || poliza.isBlank()
+                ? ""
+                : " por la poliza " + poliza;
         if ("retiro".equals(modalidad)) {
-            return "Al retirar el bien personalmente, la cobertura del seguro finaliza en el momento de la entrega.";
+            return "Cobertura vigente" + referenciaPoliza
+                    + " hasta el retiro. Finaliza cuando la empresa entrega el bien al comprador.";
         }
-        if (poliza == null || poliza.isBlank()) {
-            return "La cobertura del seguro se informara junto con la entrega.";
+        if ("envio".equals(modalidad)) {
+            return "Cobertura vigente" + referenciaPoliza
+                    + " durante el traslado. Finaliza cuando el bien se entrega en el domicilio.";
         }
-        return "El bien permanece cubierto por la poliza " + poliza + " hasta su entrega.";
+        return "El bien permanece cubierto" + referenciaPoliza
+                + " mientras esta bajo custodia de la empresa.";
     }
 
     private String normalizarModalidad(String modalidad) {

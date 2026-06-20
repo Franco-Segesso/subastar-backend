@@ -30,4 +30,7 @@ public interface ItemCatalogoRepository extends JpaRepository<ItemCatalogo, Inte
     Optional<ItemCatalogo> findBySubastaIdAndProductoId(
             @Param("subastaId") Integer subastaId,
             @Param("productoId") Integer productoId);
+
+    @Query("SELECT i FROM ItemCatalogo i WHERE i.producto.id = :productoId ORDER BY i.id DESC")
+    List<ItemCatalogo> findByProductoIdOrderByIdDesc(@Param("productoId") Integer productoId);
 }
