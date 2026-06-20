@@ -355,9 +355,15 @@ public class ConsignacionService {
             Catalogo catalogoPropuesto) {
         if (!"aceptado".equals(normalizar(solicitud.getEstado()))) return null;
         ConsignacionResponse.CondicionesEmpresaDTO dto = new ConsignacionResponse.CondicionesEmpresaDTO();
-        dto.setPrecioBase(solicitud.getPrecioBasePropuesto() == null
-                ? (item == null ? null : item.getPrecioBase())
-                : solicitud.getPrecioBasePropuesto().doubleValue());
+        
+        Double precioBase = null;
+        if (solicitud.getPrecioBasePropuesto() != null) {
+            precioBase = solicitud.getPrecioBasePropuesto().doubleValue();
+        } else if (item != null) {
+            precioBase = item.getPrecioBase();
+        }
+        dto.setPrecioBase(precioBase);
+
         dto.setComisionEmpresa(COMISION_EMPRESA);
         dto.setSeguroPoliza(seguro == null ? null : seguro.getNroPoliza());
         dto.setContactoPoliza(seguro == null ? null : seguro.getCompania());
@@ -412,8 +418,8 @@ public class ConsignacionService {
         boolean recibido = deposito != null;
         boolean inspeccionado = aceptado || rechazado;
         boolean condicionesDisponibles = aceptado && seguro != null
-                && solicitud.getCatalogoPropuestoId() != null
-                && solicitud.getPrecioBasePropuesto() != null;
+        && ((solicitud.getCatalogoPropuestoId() != null && solicitud.getPrecioBasePropuesto() != null) 
+             || item != null);
         boolean asignado = condiciones && item != null;
 
         List<ConsignacionResponse.InstanciaDTO> instancias = new ArrayList<>();
