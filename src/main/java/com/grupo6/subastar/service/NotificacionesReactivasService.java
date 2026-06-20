@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.TipoNotificacion;
+import com.grupo6.subastar.repository.ClienteRepository;
 
 @Service
 public class NotificacionesReactivasService {
@@ -13,7 +14,8 @@ public class NotificacionesReactivasService {
     private FirebasePushService firebasePushService;
     @Autowired
     private NotificacionService notificacionService;
-    
+    @Autowired
+    private ClienteRepository clienteRepository;
     // @Autowired
     // private NotificacionService notificacionService; // El que guarda en tu BD de Azure
 
@@ -36,6 +38,32 @@ public class NotificacionesReactivasService {
 
         // Disparamos la Push
         firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
+    }
+
+    // =================================================================================
+    // NOTIFICAR AL VENDEDOR QUE SU BIEN SE VENDIÓ
+    // =================================================================================
+    public void notificarBienVendidoAlDuenio(Integer idDuenio, String nombreBien, double precioFinal, double comisionCasa, Integer referenciaId) {
+        Cliente duenio = clienteRepository.findById(idDuenio)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idDuenio));
+        
+        double netoAGanar = precioFinal - comisionCasa;
+        
+        String titulo = "¡Tu artículo ha sido vendido!";
+        String mensajePush = "Tu bien '" + nombreBien + "' se vendió por $" + precioFinal + ". Revisa el detalle de la liquidación.";
+        
+        String detalleBd = String.format(
+            "¡Buenas noticias! Tu artículo '%s' se vendió exitosamente en la subasta.\n\n" +
+            "Detalle de liquidación:\n- Precio de martillo: $%.2f\n- Comisión de la casa: -$%.2f\n\n" +
+            "Monto neto a transferir: $%.2f\n\nEl dinero será enviado a la cuenta a la vista que declaraste previamente.",
+            nombreBien, precioFinal, comisionCasa, netoAGanar
+        );
+
+        // Guardamos en la BD de Azure para el historial del vendedor
+        notificacionService.crearNotificacion(duenio, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
+        
+        // Disparamos la Push al celular del vendedor
+        firebasePushService.enviarNotificacionPush(duenio.getIdentificador(), titulo, mensajePush);
     }
 
     // =================================================================================

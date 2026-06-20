@@ -314,11 +314,12 @@ public class SubastaService {
                     compra.getIdentificador()
             );
 
-            // 2. Esto hace que vibre y caiga el cartel en el celular ---
-            firebasePushService.enviarNotificacionPush(
-                ganadora.getAsistente().getCliente().getIdentificador(), // ID del cliente para el Tópico
-                "¡Subasta Ganada!",
-                "¡Felicidades! Eres el ganador del ítem #" + itemId
+            notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                item.getProducto().getDuenio(), 
+                item.getProducto().getDescripcion(), 
+                valorPujado, 
+                comisiones, 
+                item.getId()
             );
         } else {
             // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
@@ -326,7 +327,19 @@ public class SubastaService {
             item.setPrecioFinal(item.getPrecioBase()); 
             respuesta.setHayGanador(false);
             respuesta.setImporteFinal(item.getPrecioBase());
+
+            double comisiones = item.getPrecioFinal() * 0.15;
+            
+            notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                item.getProducto().getDuenio(), 
+                item.getProducto().getDescripcion(), 
+                item.getPrecioFinal(), 
+                comisiones, 
+                item.getId()
+            );
         }
+
+        
         
         itemCatalogoRepository.saveAndFlush(item);
 
