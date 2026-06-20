@@ -134,6 +134,7 @@ public class MedioPagoService {
         ChequeCertificado cheque = new ChequeCertificado();
         cheque.setCliente(cliente);
         cheque.setActivo("si");
+        cheque.setVerificadoCheque("no");
         cheque.setNroCheque(req.getNroCheque());
         cheque.setBanco(req.getBanco());
         cheque.setMoneda(req.getMoneda());

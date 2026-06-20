@@ -76,7 +76,7 @@ public class AuthService {
         c.setPersona(p); 
         c.setPais(paisReal); 
         
-        c.setAdmitido("no"); 
+        c.setAdmitido("pendiente"); 
         c.setCategoria("comun"); 
         c.setVerificadorId(1); 
         c.setFechaAprobacion(null); 
