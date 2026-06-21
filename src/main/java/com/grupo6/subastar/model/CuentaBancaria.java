@@ -25,6 +25,9 @@ public class CuentaBancaria extends MedioPago {
     @Column(name = "moneda", length = 3, nullable = false)
     private String moneda;
 
+    @Transient
+    private BigDecimal fondosDisponibles;
+
     public CuentaBancaria() { setTipo("cuenta"); }
 
     public String getCbuIban() { return cbuIban; }
@@ -39,4 +42,6 @@ public class CuentaBancaria extends MedioPago {
     public void setFondosReservados(BigDecimal fondosReservados) { this.fondosReservados = fondosReservados; }
     public String getMoneda() { return moneda; }
     public void setMoneda(String moneda) { this.moneda = moneda; }
+    public BigDecimal getFondosDisponibles() { return fondosDisponibles; }
+    public void setFondosDisponibles(BigDecimal fondosDisponibles) { this.fondosDisponibles = fondosDisponibles; }
 }

@@ -77,12 +77,15 @@ public class SubastaService {
 
         for (EstadoItemActivo estado : List.copyOf(itemsActivos.values())) {
             if (!estado.cerrando && !estado.deadline.isAfter(ahora)) {
+                if (extenderDeadlineConUltimaPuja(estado, ahora)) {
+                    continue;
+                }
                 estado.cerrando = true;
                 try {
                     cerrarSubastaItem(estado.subastaId, estado.itemId);
                     activarSiguienteItem(estado.subastaId, ahoraNegocio());
                 } catch (RuntimeException e) {
-                    itemsActivos.remove(estado.subastaId);
+                    estado.cerrando = false;
                     System.err.println(">> ERROR cerrando item " + estado.itemId + " de subasta " + estado.subastaId + ": " + e.getMessage());
                 }
             }
@@ -129,6 +132,8 @@ public class SubastaService {
         }
         medioPagoService.validarDisponibilidadParaSubasta(
                 cliente, subasta.getMoneda());
+
+        asistenteRepository.desactivarSesionesFueraDeSubastaAbierta(cliente);
 
         Optional<Asistente> asistenteActual = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si");
         if (asistenteActual.isPresent()) {
@@ -300,6 +305,7 @@ public class SubastaService {
         
         CierreSubastaDTO respuesta = new CierreSubastaDTO();
         respuesta.setItemId(itemId);
+        Runnable notificacionPostCommit = null;
 
         if (pujaGanadoraOpt.isPresent()) {
             // Se vendió
@@ -320,25 +326,29 @@ public class SubastaService {
             double comisiones = valorPujado * 0.15; // Ejemplo: 15% de comisión
             double costoEnvio = 5000.0; // O la lógica que usen para envíos
 
-            // --- DISPARO: SUBASTA GANADA ---
-            notificacionesReactivasService.notificarSubastaGanada(
-                    ganadora.getAsistente().getCliente(),
-                    ganadora.getAsistente().getCliente().getPersona().getNombre(),
-                    valorPujado,
-                    comisiones,
-                    costoEnvio,
-                    compra.getIdentificador()
-            );
-
-            notificacionesReactivasService.notificarBienVendidoAlDuenio(
-                item.getProducto().getDuenio(), 
-                item.getProducto().getDescripcion(), 
-                valorPujado, 
-                comisiones, 
-                solicitudConsignacionRepository
-                        .findIdByProductoId(item.getProducto().getId())
-                        .orElse(null)
-            );
+            Cliente clienteGanador = ganadora.getAsistente().getCliente();
+            Integer duenioOriginal = item.getProducto().getDuenio();
+            String descripcionItem = item.getProducto().getDescripcion();
+            Integer consignacionId = solicitudConsignacionRepository
+                    .findIdByProductoId(item.getProducto().getId())
+                    .orElse(null);
+            notificacionPostCommit = () -> {
+                notificarSinInterrumpir(() ->
+                        notificacionesReactivasService.notificarSubastaGanada(
+                                clienteGanador,
+                                descripcionItem,
+                                valorPujado,
+                                comisiones,
+                                costoEnvio,
+                                compra.getIdentificador()));
+                notificarSinInterrumpir(() ->
+                        notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                                duenioOriginal,
+                                descripcionItem,
+                                valorPujado,
+                                comisiones,
+                                consignacionId));
+            };
         } else {
     // No hubo pujas: la empresa compra el ítem al precio base.
     item.setSubastado("si");
@@ -383,12 +393,20 @@ public class SubastaService {
         }
 
         
-        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
         itemsActivos.remove(subastaId);
-        messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/estado",
-                new EstadoPujaDTO(
-                        subastaId, itemId, 0, respuesta.getImporteFinal(),
-                        null, null, true));
+        Runnable notificacionFinal = notificacionPostCommit;
+        ejecutarDespuesDeCommit(() -> {
+            messagingTemplate.convertAndSend(
+                    "/topic/subastas/" + subastaId + "/cierre", respuesta);
+            messagingTemplate.convertAndSend(
+                    "/topic/subastas/" + subastaId + "/estado",
+                    new EstadoPujaDTO(
+                            subastaId, itemId, 0, respuesta.getImporteFinal(),
+                            null, null, true));
+            if (notificacionFinal != null) {
+                notificacionFinal.run();
+            }
+        });
 
         return respuesta;
     }
@@ -547,6 +565,30 @@ public class SubastaService {
         }
     }
 
+    private void notificarSinInterrumpir(Runnable notificacion) {
+        try {
+            notificacion.run();
+        } catch (RuntimeException e) {
+            System.err.println(
+                    ">> El cierre se confirmo, pero fallo una notificacion: "
+                            + e.getMessage());
+        }
+    }
+
+    private void ejecutarDespuesDeCommit(Runnable accion) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            accion.run();
+                        }
+                    });
+        } else {
+            accion.run();
+        }
+    }
+
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {
         if (itemsActivos.containsKey(subastaId)) return;
 
@@ -561,16 +603,48 @@ public class SubastaService {
         }
 
         ItemCatalogo item = pendientes.get(0);
-        Double importeActual = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item)
+        Optional<Puja> ultimaPuja =
+                pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
+        Double importeActual = ultimaPuja
                 .map(Puja::getImporte)
                 .orElse(item.getPrecioBase());
+        LocalDateTime deadline = ultimaPuja
+                .map(Puja::getFechaHora)
+                .filter(fecha -> fecha != null)
+                .map(fecha -> fecha.plusSeconds(DURACION_ITEM_SEGUNDOS))
+                .orElse(ahora.plusSeconds(DURACION_ITEM_SEGUNDOS));
         EstadoItemActivo estado = new EstadoItemActivo(
                 subastaId,
                 item.getId(),
-                ahora.plusSeconds(DURACION_ITEM_SEGUNDOS),
+                deadline,
                 importeActual);
         itemsActivos.put(subastaId, estado);
         emitirEstado(estado, ahora, false);
+    }
+
+    private boolean extenderDeadlineConUltimaPuja(
+            EstadoItemActivo estado,
+            LocalDateTime ahora) {
+        ItemCatalogo item = itemCatalogoRepository
+                .findByIdAndSubastaId(estado.subastaId, estado.itemId)
+                .orElse(null);
+        if (item == null || "si".equals(normalizar(item.getSubastado()))) {
+            return false;
+        }
+        Optional<Puja> ultimaPuja =
+                pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
+        if (ultimaPuja.isEmpty() || ultimaPuja.get().getFechaHora() == null) {
+            return false;
+        }
+        LocalDateTime deadlinePersistido = ultimaPuja.get().getFechaHora()
+                .plusSeconds(DURACION_ITEM_SEGUNDOS);
+        if (!deadlinePersistido.isAfter(estado.deadline)) {
+            return false;
+        }
+        estado.deadline = deadlinePersistido;
+        estado.importeActual = ultimaPuja.get().getImporte();
+        emitirEstado(estado, ahora, false);
+        return deadlinePersistido.isAfter(ahora);
     }
 
     private void emitirEstadoActual(Integer subastaId) {

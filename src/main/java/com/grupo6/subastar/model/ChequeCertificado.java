@@ -26,6 +26,9 @@ public class ChequeCertificado extends MedioPago {
     @Column(name = "fechaEntrega", nullable = false)
     private LocalDate fechaEntrega;
 
+    @Transient
+    private BigDecimal fondosDisponibles;
+
     public ChequeCertificado() { setTipo("cheque"); }
 
     public String getNroCheque() { return nroCheque; }
@@ -40,4 +43,6 @@ public class ChequeCertificado extends MedioPago {
     public void setVerificadoCheque(String verificadoCheque) { this.verificadoCheque = verificadoCheque; }
     public LocalDate getFechaEntrega() { return fechaEntrega; }
     public void setFechaEntrega(LocalDate fechaEntrega) { this.fechaEntrega = fechaEntrega; }
+    public BigDecimal getFondosDisponibles() { return fondosDisponibles; }
+    public void setFondosDisponibles(BigDecimal fondosDisponibles) { this.fondosDisponibles = fondosDisponibles; }
 }

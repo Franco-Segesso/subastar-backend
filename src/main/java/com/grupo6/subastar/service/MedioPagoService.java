@@ -39,16 +39,18 @@ public class MedioPagoService {
     public List<MedioPago> obtenerMediosPago(Integer clienteId) throws Exception {
         clienteRepository.findById(clienteId)
                 .orElseThrow(() -> new Exception("Cliente no encontrado con id: " + clienteId));
-        return medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si");
+        return completarDisponibilidad(
+                medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si"));
     }
 
     public List<MedioPago> obtenerMediosPago(String email) {
         Cliente cliente = clienteRepository.findByPersonaEmail(email)
                 .orElseThrow(() -> new RuntimeException(
                         "401: Token invalido, ausente o expirado"));
-        return medioPagoRepository.findByClienteIdentificadorAndActivo(
-                cliente.getIdentificador(),
-                "si");
+        return completarDisponibilidad(
+                medioPagoRepository.findByClienteIdentificadorAndActivo(
+                        cliente.getIdentificador(),
+                        "si"));
     }
 
     @Transactional(readOnly = true)
@@ -228,7 +230,10 @@ public class MedioPagoService {
         if (medio instanceof CuentaBancaria cuenta) {
             BigDecimal disponible = saldo(cuenta.getFondosReservados()).subtract(comprometido);
             if (disponible.compareTo(requerido) < 0) {
-                throw new RuntimeException("403: Fondos reservados insuficientes");
+                throw new RuntimeException(
+                        "403: Fondos insuficientes. Disponible: "
+                                + disponible.max(BigDecimal.ZERO)
+                                + ". Requerido con comision: " + requerido);
             }
         } else if (medio instanceof ChequeCertificado cheque) {
             if (!"si".equalsIgnoreCase(cheque.getVerificadoCheque())) {
@@ -236,7 +241,10 @@ public class MedioPagoService {
             }
             BigDecimal disponible = saldo(cheque.getMontoGarantia()).subtract(comprometido);
             if (disponible.compareTo(requerido) < 0) {
-                throw new RuntimeException("403: Garantia del cheque insuficiente");
+                throw new RuntimeException(
+                        "403: Garantia insuficiente. Disponible: "
+                                + disponible.max(BigDecimal.ZERO)
+                                + ". Requerido con comision: " + requerido);
             }
         }
         return medio;
@@ -326,6 +334,26 @@ public class MedioPagoService {
 
     private BigDecimal saldo(BigDecimal valor) {
         return valor == null ? BigDecimal.ZERO : valor;
+    }
+
+    private List<MedioPago> completarDisponibilidad(List<MedioPago> medios) {
+        for (MedioPago medio : medios) {
+            BigDecimal comprometido = BigDecimal.valueOf(valor(
+                    registroSubastaRepository.sumPendienteByMedioPagoId(
+                            medio.getIdentificador())));
+            if (medio instanceof CuentaBancaria cuenta) {
+                cuenta.setFondosDisponibles(
+                        saldo(cuenta.getFondosReservados())
+                                .subtract(comprometido)
+                                .max(BigDecimal.ZERO));
+            } else if (medio instanceof ChequeCertificado cheque) {
+                cheque.setFondosDisponibles(
+                        saldo(cheque.getMontoGarantia())
+                                .subtract(comprometido)
+                                .max(BigDecimal.ZERO));
+            }
+        }
+        return medios;
     }
 
     private double valor(Double numero) {
