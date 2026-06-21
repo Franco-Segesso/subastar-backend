@@ -20,9 +20,13 @@ public record HistorialPujasClienteDTO(
 
     public record PujaDTO(
             Integer orden,
+            Integer itemId,
+            String descripcionItem,
             Double importe,
             LocalDateTime fechaHora,
             Boolean esGanadora,
+            Integer compraId,
+            String estadoPago,
             SuperadaPorDTO superadaPor) {
     }
 

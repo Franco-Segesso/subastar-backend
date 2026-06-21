@@ -127,6 +127,8 @@ public class SubastaService {
         if (pesoCliente < pesoSubasta) {
             throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
         }
+        medioPagoService.validarDisponibilidadParaSubasta(
+                cliente, subasta.getMoneda());
 
         Optional<Asistente> asistenteActual = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si");
         if (asistenteActual.isPresent()) {
@@ -352,15 +354,14 @@ public class SubastaService {
     double valorVenta = item.getPrecioBase();
     double comisiones = calcularComision(valorVenta, item.getComision());
 
-    notificacionesReactivasService.notificarBienVendidoAlDuenio(
-        item.getProducto().getDuenio(),
-        item.getProducto().getDescripcion(),
-        valorVenta,
-        comisiones,
-        solicitudConsignacionRepository
-                .findIdByProductoId(item.getProducto().getId())
-                .orElse(null)
-    );
+    notificarVentaSinInterrumpirCierre(
+            item.getProducto().getDuenio(),
+            item.getProducto().getDescripcion(),
+            valorVenta,
+            comisiones,
+            solicitudConsignacionRepository
+                    .findIdByProductoId(item.getProducto().getId())
+                    .orElse(null));
 }
 
         
@@ -385,7 +386,9 @@ public class SubastaService {
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/cierre", respuesta);
         itemsActivos.remove(subastaId);
         messagingTemplate.convertAndSend("/topic/subastas/" + subastaId + "/estado",
-                new EstadoPujaDTO(subastaId, itemId, 0, respuesta.getImporteFinal(), true));
+                new EstadoPujaDTO(
+                        subastaId, itemId, 0, respuesta.getImporteFinal(),
+                        null, null, true));
 
         return respuesta;
     }
@@ -464,8 +467,8 @@ public class SubastaService {
     compra.setMedioPagoId(null);
     compra.setEstadoPago("pagada");
     compra.setFechaPago(ahoraNegocio());
-    compra.setEstadoEntrega("entregada");
-    compra.setFechaEntrega(ahoraNegocio());
+    compra.setEstadoEntrega("pendiente");
+    compra.setFechaEntrega(null);
     compra = registroSubastaRepository.save(compra);
     double comisionEmpresa = valor(compra.getComision());
 
@@ -484,12 +487,19 @@ public class SubastaService {
                         .map(CuentaDestino::getCbuIban)
                         .orElse(null);
                 double neto = importe - comisionEmpresa;
-                notificacionesReactivasService.notificarTransferenciaEnviada(
-                        duenioOriginal,
-                        producto.getDescripcion(),
-                        neto,
-                        cbu,
-                        solicitud.getIdentificador());
+                try {
+                    notificacionesReactivasService.notificarTransferenciaEnviada(
+                            duenioOriginal,
+                            producto.getDescripcion(),
+                            neto,
+                            cbu,
+                            solicitud.getIdentificador());
+                } catch (RuntimeException e) {
+                    System.err.println(
+                            ">> La compra de la empresa se registro, pero no se "
+                                    + "pudo notificar la transferencia: "
+                                    + e.getMessage());
+                }
             });
 
     return compra;
@@ -519,6 +529,22 @@ public class SubastaService {
 
     private double valor(Double numero) {
         return numero == null ? 0.0 : numero;
+    }
+
+    private void notificarVentaSinInterrumpirCierre(
+            Integer duenioId,
+            String descripcion,
+            double importe,
+            double comision,
+            Integer referenciaId) {
+        try {
+            notificacionesReactivasService.notificarBienVendidoAlDuenio(
+                    duenioId, descripcion, importe, comision, referenciaId);
+        } catch (RuntimeException e) {
+            System.err.println(
+                    ">> El item se vendio a la empresa, pero no se pudo "
+                            + "enviar la notificacion: " + e.getMessage());
+        }
     }
 
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {
@@ -557,11 +583,26 @@ public class SubastaService {
     private void emitirEstado(EstadoItemActivo estado, LocalDateTime ahora, boolean cerrado) {
         long millisRestantes = Math.max(0, ChronoUnit.MILLIS.between(ahora, estado.deadline));
         long restante = (millisRestantes + 999) / 1000;
+        ItemCatalogo item = itemCatalogoRepository
+                .findByIdAndSubastaId(estado.subastaId, estado.itemId)
+                .orElse(null);
+        Double minimo = null;
+        Double maximo = null;
+        if (!cerrado && item != null && item.getPrecioBase() != null) {
+            minimo = estado.importeActual + item.getPrecioBase() * 0.01;
+            String categoria = item.getCatalogo().getSubasta().getCategoria();
+            if (!"oro".equalsIgnoreCase(categoria)
+                    && !"platino".equalsIgnoreCase(categoria)) {
+                maximo = estado.importeActual + item.getPrecioBase() * 0.20;
+            }
+        }
         EstadoPujaDTO dto = new EstadoPujaDTO(
                 estado.subastaId,
                 estado.itemId,
                 (int) restante,
                 estado.importeActual,
+                minimo,
+                maximo,
                 cerrado);
         messagingTemplate.convertAndSend("/topic/subastas/" + estado.subastaId + "/estado", dto);
     }

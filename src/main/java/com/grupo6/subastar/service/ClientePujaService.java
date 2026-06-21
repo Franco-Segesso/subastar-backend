@@ -87,11 +87,25 @@ public class ClientePujaService {
         List<HistorialPujasClienteDTO.PujaDTO> historial = new ArrayList<>();
         for (int indice = 0; indice < pujasCliente.size(); indice++) {
             Puja puja = pujasCliente.get(indice);
+            Optional<com.grupo6.subastar.model.RegistroSubasta> compra =
+                    esGanadora(puja)
+                            ? registroSubastaRepository
+                            .findFirstBySubastaIdAndProductoIdAndClienteId(
+                                    subastaId,
+                                    puja.getItemCatalogo().getProducto().getId(),
+                                    cliente.getIdentificador())
+                            : Optional.empty();
             historial.add(new HistorialPujasClienteDTO.PujaDTO(
                     indice + 1,
+                    puja.getItemCatalogo().getId(),
+                    puja.getItemCatalogo().getProducto().getDescripcion(),
                     puja.getImporte(),
                     puja.getFechaHora(),
                     esGanadora(puja),
+                    compra.map(registro -> registro.getIdentificador())
+                            .orElse(null),
+                    compra.map(registro -> registro.getEstadoPago())
+                            .orElse(null),
                     buscarPujaSuperadora(puja, todasLasPujas)));
         }
 

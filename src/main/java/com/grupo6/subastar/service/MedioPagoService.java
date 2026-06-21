@@ -51,6 +51,64 @@ public class MedioPagoService {
                 "si");
     }
 
+    @Transactional(readOnly = true)
+    public void validarDisponibilidadParaSubasta(
+            Cliente cliente,
+            String monedaSubasta) {
+        String moneda = monedaSubasta == null
+                ? "" : monedaSubasta.trim().toUpperCase(Locale.ROOT);
+        List<MedioPago> activos = medioPagoRepository
+                .findByClienteIdentificadorAndActivo(
+                        cliente.getIdentificador(), "si");
+
+        if ("USD".equals(moneda)) {
+            boolean tarjetaInternacional = activos.stream().anyMatch(medio -> {
+                if (!(medio instanceof TarjetaCredito tarjeta)
+                        || !"si".equalsIgnoreCase(tarjeta.getEsExtranjera())) {
+                    return false;
+                }
+                try {
+                    validarVencimiento(tarjeta.getVencimiento());
+                    return true;
+                } catch (RuntimeException e) {
+                    return false;
+                }
+            });
+            if (!tarjetaInternacional) {
+                throw new RuntimeException(
+                        "403: Para ingresar a una subasta en USD necesitas una tarjeta internacional vigente");
+            }
+            return;
+        }
+
+        boolean medioEnPesos = activos.stream().anyMatch(medio -> {
+            if (medio instanceof TarjetaCredito tarjeta) {
+                try {
+                    validarVencimiento(tarjeta.getVencimiento());
+                    return true;
+                } catch (RuntimeException e) {
+                    return false;
+                }
+            }
+            if (medio instanceof CuentaBancaria cuenta) {
+                return "ARS".equalsIgnoreCase(cuenta.getMoneda())
+                        && saldo(cuenta.getFondosReservados())
+                        .compareTo(BigDecimal.ZERO) > 0;
+            }
+            if (medio instanceof ChequeCertificado cheque) {
+                return "ARS".equalsIgnoreCase(cheque.getMoneda())
+                        && "si".equalsIgnoreCase(cheque.getVerificadoCheque())
+                        && saldo(cheque.getMontoGarantia())
+                        .compareTo(BigDecimal.ZERO) > 0;
+            }
+            return false;
+        });
+        if (!medioEnPesos) {
+            throw new RuntimeException(
+                    "403: Para ingresar a una subasta en ARS necesitas un medio de pago vigente y utilizable en pesos");
+        }
+    }
+
     // POST: agregar tarjeta
     @Transactional
     public MedioPago agregarTarjeta(Integer clienteId, AgregarTarjetaRequest req) throws Exception {
