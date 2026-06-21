@@ -201,18 +201,28 @@ public class NotificacionesReactivasService {
     // =================================================================================
     // 9. TRANSFERENCIA ENVIADA AL DUEÑO ORIGINAL (Desde CompraService al pagar)
     // =================================================================================
-    public void notificarTransferenciaEnviada(Integer idDuenio, String nombreBien, double importeNeto, String cbuDestino, Integer referenciaId) {
+    public void notificarTransferenciaEnviada(
+            Integer idDuenio,
+            String nombreBien,
+            double precioVenta,
+            double importeNeto,
+            String cbuDestino,
+            Integer referenciaId) {
         Cliente duenio = clienteRepository.findById(idDuenio)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idDuenio));
 
-        String titulo = "Transferencia acreditada";
-        String mensajePush = "El pago por tu bien '" + nombreBien + "' fue enviado a tu cuenta destino.";
+        String titulo = "Consignacion vendida y pagada";
+        String mensajePush = "El comprador pago '" + nombreBien
+                + "' por $" + String.format("%.2f", precioVenta)
+                + ". Revisa la liquidacion.";
 
         String detalleBd = String.format(
             "El comprador completó el pago por tu artículo '%s'.\n\n" +
             "Importe neto acreditado (precio de venta - 15%% de comisión): $%.2f\n\n" +
+            "Precio final de venta: $%.2f\n" +
             "La transferencia fue enviada a la cuenta declarada con CBU/IBAN: %s",
-            nombreBien, importeNeto, cbuDestino != null ? cbuDestino : "cuenta registrada"
+            nombreBien, importeNeto, precioVenta,
+            cbuDestino != null ? cbuDestino : "cuenta registrada"
         );
 
         notificacionService.crearNotificacion(

@@ -24,6 +24,8 @@ import java.time.LocalDateTime;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class CompraService {
@@ -185,12 +187,14 @@ public class CompraService {
             solicitudRepository.save(solicitud);
             double importeNeto = valor(compra.getImporte())
                     - valor(compra.getComision());
-            notificacionesService.notificarTransferenciaEnviada(
-                    compra.getDuenioId(),
-                    producto.getDescripcion(),
-                    importeNeto,
-                    cuentaDestino.getCbuIban(),
-                    solicitud.getIdentificador());
+            ejecutarDespuesDeCommit(() ->
+                    notificacionesService.notificarTransferenciaEnviada(
+                            compra.getDuenioId(),
+                            producto.getDescripcion(),
+                            valor(compra.getImporte()),
+                            importeNeto,
+                            cuentaDestino.getCbuIban(),
+                            solicitud.getIdentificador()));
         }
 
         return new PagoCompraResponse(
@@ -289,5 +293,25 @@ public class CompraService {
 
     private double valor(Double numero) {
         return numero == null ? 0.0 : numero;
+    }
+
+    private void ejecutarDespuesDeCommit(Runnable accion) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                accion.run();
+                            } catch (RuntimeException e) {
+                                System.err.println(
+                                        ">> El pago se confirmo, pero fallo la notificacion al vendedor: "
+                                                + e.getMessage());
+                            }
+                        }
+                    });
+        } else {
+            accion.run();
+        }
     }
 }

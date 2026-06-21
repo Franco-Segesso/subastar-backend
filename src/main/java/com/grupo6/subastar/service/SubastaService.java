@@ -130,6 +130,24 @@ public class SubastaService {
         if (pesoCliente < pesoSubasta) {
             throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
         }
+        EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
+        if (estadoActivo == null) {
+            activarSiguienteItem(subastaId, ahoraNegocio());
+            estadoActivo = itemsActivos.get(subastaId);
+        }
+        if (estadoActivo != null) {
+            ItemCatalogo itemActivo = itemCatalogoRepository
+                    .findByIdAndSubastaId(subastaId, estadoActivo.itemId)
+                    .orElse(null);
+            if (itemActivo != null
+                    && itemActivo.getProducto() != null
+                    && cliente.getIdentificador().equals(
+                            itemActivo.getProducto().getDuenio())) {
+                throw new RuntimeException(
+                        "403: No podes participar en la puja de un item propio");
+            }
+        }
+
         medioPagoService.validarDisponibilidadParaSubasta(
                 cliente, subasta.getMoneda());
 
@@ -327,11 +345,17 @@ public class SubastaService {
             double costoEnvio = 5000.0; // O la lógica que usen para envíos
 
             Cliente clienteGanador = ganadora.getAsistente().getCliente();
-            Integer duenioOriginal = item.getProducto().getDuenio();
             String descripcionItem = item.getProducto().getDescripcion();
             Integer consignacionId = solicitudConsignacionRepository
                     .findIdByProductoId(item.getProducto().getId())
                     .orElse(null);
+            if (consignacionId != null) {
+                solicitudConsignacionRepository.findById(consignacionId)
+                        .ifPresent(solicitud -> {
+                            solicitud.setEstado("vendida");
+                            solicitudConsignacionRepository.save(solicitud);
+                        });
+            }
             notificacionPostCommit = () -> {
                 notificarSinInterrumpir(() ->
                         notificacionesReactivasService.notificarSubastaGanada(
@@ -341,13 +365,6 @@ public class SubastaService {
                                 comisiones,
                                 costoEnvio,
                                 compra.getIdentificador()));
-                notificarSinInterrumpir(() ->
-                        notificacionesReactivasService.notificarBienVendidoAlDuenio(
-                                duenioOriginal,
-                                descripcionItem,
-                                valorPujado,
-                                comisiones,
-                                consignacionId));
             };
         } else {
     // No hubo pujas: la empresa compra el ítem al precio base.
@@ -509,6 +526,7 @@ public class SubastaService {
                     notificacionesReactivasService.notificarTransferenciaEnviada(
                             duenioOriginal,
                             producto.getDescripcion(),
+                            importe,
                             neto,
                             cbu,
                             solicitud.getIdentificador());

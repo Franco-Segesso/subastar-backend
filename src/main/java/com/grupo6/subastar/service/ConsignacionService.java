@@ -479,7 +479,10 @@ private CuentaDestino buscarCuentaDestino(SolicitudConsignacion solicitud) {
         String fecha = solicitud.getFechaSolicitud() != null
                 ? solicitud.getFechaSolicitud().format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US))
                 : "--";
-        boolean aceptado = "aceptado".equals(normalizar(solicitud.getEstado()));
+        boolean ventaFinalizada =
+                "vendida".equals(normalizar(solicitud.getEstado()));
+        boolean aceptado = "aceptado".equals(normalizar(solicitud.getEstado()))
+                || ventaFinalizada;
         boolean rechazado = "rechazado".equals(normalizar(solicitud.getEstado()));
         boolean documentacionPendiente =
                 "documentacion_pendiente".equals(normalizar(solicitud.getEstado()));
@@ -488,7 +491,7 @@ private CuentaDestino buscarCuentaDestino(SolicitudConsignacion solicitud) {
         boolean inspeccionPendiente =
                 "pendiente".equals(normalizar(solicitud.getEstado()));
         boolean condiciones = "si".equals(normalizar(solicitud.getCondicionesAceptadas()));
-        boolean vendida = registroSubastaRepository
+        boolean pagada = registroSubastaRepository
                 .findFirstByProductoIdAndEstadoPago(
                         solicitud.getProducto().getId(), "pagada")
                 .isPresent();
@@ -525,9 +528,12 @@ private CuentaDestino buscarCuentaDestino(SolicitudConsignacion solicitud) {
         instancias.add(new ConsignacionResponse.InstanciaDTO(
                 "Asignacion a subasta", asignado ? fecha : "--", asignado,
                 condiciones && !asignado));
-        if (vendida) {
+        if (ventaFinalizada) {
             instancias.add(new ConsignacionResponse.InstanciaDTO(
-                    "Bien vendido y pagado", fecha, true, false));
+                    pagada ? "Bien vendido y pagado" : "Bien vendido - pago pendiente",
+                    fecha, true, !pagada));
+        }
+        if (pagada) {
             instancias.add(new ConsignacionResponse.InstanciaDTO(
                     "Transferencia enviada al propietario",
                     fecha, true, false));
