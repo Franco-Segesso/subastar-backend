@@ -7,12 +7,18 @@ public class ConsignacionResponse {
     private Integer identificador;
     private String estado;
     private String motivoRechazo;
+    private Double costoDevolucion;
+    private String monedaDevolucion;
+    private String instruccionDevolucion;
+    private String motivoDocumentacion;
     private Boolean condicionesAceptadas;
     private LocalDateTime fechaSolicitud;
     private ProductoConsignadoDTO producto;
     private CondicionesEmpresaDTO condicionesEmpresa;
     private UbicacionDepositoDTO ubicacionDeposito;
     private SeguroDTO seguro;
+    private CuentaDestinoDTO cuentaDestino;
+    private List<DocumentoDTO> documentosOrigen;
     private List<InstanciaDTO> instancias;
     private Double importeFinalObtenido;
 
@@ -22,6 +28,14 @@ public class ConsignacionResponse {
     public void setEstado(String estado) { this.estado = estado; }
     public String getMotivoRechazo() { return motivoRechazo; }
     public void setMotivoRechazo(String motivoRechazo) { this.motivoRechazo = motivoRechazo; }
+    public Double getCostoDevolucion() { return costoDevolucion; }
+    public void setCostoDevolucion(Double costoDevolucion) { this.costoDevolucion = costoDevolucion; }
+    public String getMonedaDevolucion() { return monedaDevolucion; }
+    public void setMonedaDevolucion(String monedaDevolucion) { this.monedaDevolucion = monedaDevolucion; }
+    public String getInstruccionDevolucion() { return instruccionDevolucion; }
+    public void setInstruccionDevolucion(String instruccionDevolucion) { this.instruccionDevolucion = instruccionDevolucion; }
+    public String getMotivoDocumentacion() { return motivoDocumentacion; }
+    public void setMotivoDocumentacion(String motivoDocumentacion) { this.motivoDocumentacion = motivoDocumentacion; }
     public Boolean getCondicionesAceptadas() { return condicionesAceptadas; }
     public void setCondicionesAceptadas(Boolean condicionesAceptadas) { this.condicionesAceptadas = condicionesAceptadas; }
     public LocalDateTime getFechaSolicitud() { return fechaSolicitud; }
@@ -34,6 +48,10 @@ public class ConsignacionResponse {
     public void setUbicacionDeposito(UbicacionDepositoDTO ubicacionDeposito) { this.ubicacionDeposito = ubicacionDeposito; }
     public SeguroDTO getSeguro() { return seguro; }
     public void setSeguro(SeguroDTO seguro) { this.seguro = seguro; }
+    public CuentaDestinoDTO getCuentaDestino() { return cuentaDestino; }
+public void setCuentaDestino(CuentaDestinoDTO cuentaDestino) { this.cuentaDestino = cuentaDestino; }
+    public List<DocumentoDTO> getDocumentosOrigen() { return documentosOrigen; }
+    public void setDocumentosOrigen(List<DocumentoDTO> documentosOrigen) { this.documentosOrigen = documentosOrigen; }
     public List<InstanciaDTO> getInstancias() { return instancias; }
     public void setInstancias(List<InstanciaDTO> instancias) { this.instancias = instancias; }
     public Double getImporteFinalObtenido() { return importeFinalObtenido; }
@@ -70,6 +88,7 @@ public class ConsignacionResponse {
         private String seguroPoliza;
         private String contactoPoliza;
         private String subastaAsignada;
+        private String moneda;
 
         public Double getPrecioBase() { return precioBase; }
         public void setPrecioBase(Double precioBase) { this.precioBase = precioBase; }
@@ -81,6 +100,8 @@ public class ConsignacionResponse {
         public void setContactoPoliza(String contactoPoliza) { this.contactoPoliza = contactoPoliza; }
         public String getSubastaAsignada() { return subastaAsignada; }
         public void setSubastaAsignada(String subastaAsignada) { this.subastaAsignada = subastaAsignada; }
+        public String getMoneda() { return moneda; }
+        public void setMoneda(String moneda) { this.moneda = moneda; }
     }
 
     public static class UbicacionDepositoDTO {
@@ -97,6 +118,8 @@ public class ConsignacionResponse {
         private String nroPoliza;
         private String compania;
         private Double importe;
+        private String polizaCombinada;
+        private String moneda;
 
         public String getNroPoliza() { return nroPoliza; }
         public void setNroPoliza(String nroPoliza) { this.nroPoliza = nroPoliza; }
@@ -104,6 +127,32 @@ public class ConsignacionResponse {
         public void setCompania(String compania) { this.compania = compania; }
         public Double getImporte() { return importe; }
         public void setImporte(Double importe) { this.importe = importe; }
+        public String getPolizaCombinada() { return polizaCombinada; }
+        public void setPolizaCombinada(String polizaCombinada) { this.polizaCombinada = polizaCombinada; }
+        public String getMoneda() { return moneda; }
+        public void setMoneda(String moneda) { this.moneda = moneda; }
+    }
+
+    public static class DocumentoDTO {
+        private Integer identificador;
+        private String nombreArchivo;
+        private String urlArchivo;
+        private String descripcion;
+        private LocalDateTime fechaCarga;
+        private String estado;
+
+        public Integer getIdentificador() { return identificador; }
+        public void setIdentificador(Integer identificador) { this.identificador = identificador; }
+        public String getNombreArchivo() { return nombreArchivo; }
+        public void setNombreArchivo(String nombreArchivo) { this.nombreArchivo = nombreArchivo; }
+        public String getUrlArchivo() { return urlArchivo; }
+        public void setUrlArchivo(String urlArchivo) { this.urlArchivo = urlArchivo; }
+        public String getDescripcion() { return descripcion; }
+        public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
+        public LocalDateTime getFechaCarga() { return fechaCarga; }
+        public void setFechaCarga(LocalDateTime fechaCarga) { this.fechaCarga = fechaCarga; }
+        public String getEstado() { return estado; }
+        public void setEstado(String estado) { this.estado = estado; }
     }
 
     public static class InstanciaDTO {

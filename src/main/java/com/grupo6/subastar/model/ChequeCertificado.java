@@ -21,7 +21,7 @@ public class ChequeCertificado extends MedioPago {
     private BigDecimal montoGarantia;
 
     @Column(name = "verificado", length = 2)
-    private String verificadoCheque = "si";
+    private String verificadoCheque = "no";
 
     @Column(name = "fechaEntrega", nullable = false)
     private LocalDate fechaEntrega;

@@ -7,14 +7,14 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 @Service
-public class VigilianteVencimientosService {
+public class VigilanteVencimientosService {
 
     private static final ZoneId ZONA_NEGOCIO =
             ZoneId.of("America/Argentina/Buenos_Aires");
 
     private final MultaService multaService;
 
-    public VigilianteVencimientosService(MultaService multaService) {
+    public VigilanteVencimientosService(MultaService multaService) {
         this.multaService = multaService;
     }
 

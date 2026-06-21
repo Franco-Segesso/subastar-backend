@@ -32,3 +32,8 @@ firebase-admin-key.json
 
 ### VS Code ###
 .vscode/
+
+# Credenciales locales de los asistentes administrativos
+scripts/**/.env
+scripts/**/__pycache__/
+scripts/**/*.pyc

@@ -2,6 +2,7 @@ package com.grupo6.subastar.model;
 
 import jakarta.persistence.*;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Entity
 @Table(name = "itemsCatalogo")
@@ -33,6 +34,9 @@ public class ItemCatalogo {
     @Column(name = "precioFinal")
     private Double precioFinal;
 
+    @Transient
+    private Seguro seguroDetalle;
+
     public ItemCatalogo() {}
 
     // Getters y Setters
@@ -50,4 +54,7 @@ public class ItemCatalogo {
     public void setSubastado(String subastado) { this.subastado = subastado; }
     public Double getPrecioFinal() { return precioFinal; }
     public void setPrecioFinal(Double precioFinal) { this.precioFinal = precioFinal; }
+    @JsonProperty("seguro")
+    public Seguro getSeguroDetalle() { return seguroDetalle; }
+    public void setSeguroDetalle(Seguro seguroDetalle) { this.seguroDetalle = seguroDetalle; }
 }

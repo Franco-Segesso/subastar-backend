@@ -37,11 +37,11 @@ public class Cliente {
     @Column(name = "fechaAprobacion")
     private LocalDate fechaAprobacion;
 
-  
 
-    
 
-   
+
+
+
 
     // Constructores
     public Cliente() {}
@@ -72,8 +72,9 @@ public class Cliente {
     public void setFechaAprobacion(LocalDate fechaAprobacion) { this.fechaAprobacion = fechaAprobacion; }
 
 
-    
-    
 
-    
+
+
+
+
 }

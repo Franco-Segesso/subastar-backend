@@ -34,7 +34,9 @@ public class NotificacionesReactivasService {
         );
 
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
-        firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.GANADA.name(), referenciaId);
     }
 
     // =================================================================================
@@ -56,8 +58,14 @@ public class NotificacionesReactivasService {
             nombreBien, precioFinal, comisionCasa, netoAGanar
         );
 
-        notificacionService.crearNotificacion(duenio, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
-        firebasePushService.enviarNotificacionPush(duenio.getIdentificador(), titulo, mensajePush);
+        TipoNotificacion tipo = referenciaId == null
+                ? TipoNotificacion.INFORMATIVA
+                : TipoNotificacion.CONSIGNACION;
+        notificacionService.crearNotificacion(
+                duenio, titulo, detalleBd, tipo, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                duenio.getIdentificador(), titulo, mensajePush,
+                tipo.name(), referenciaId);
     }
 
     // =================================================================================
@@ -67,8 +75,10 @@ public class NotificacionesReactivasService {
         String titulo = "Consignación en Revisión";
         String mensaje = "Hemos recibido el formulario de tu artículo '" + nombreBien + "'. Nuestros expertos lo están evaluando.";
 
-        notificacionService.crearNotificacion(cliente, titulo, mensaje, TipoNotificacion.INFORMATIVA, referenciaId);
-        firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensaje);
+        notificacionService.crearNotificacion(cliente, titulo, mensaje, TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensaje,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -85,7 +95,9 @@ public class NotificacionesReactivasService {
                            "\n\nTe recordamos que, tal como aceptaste en los términos, el bien te será devuelto a tu domicilio con cargo a tu cuenta.";
 
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
-        firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -104,23 +116,35 @@ public class NotificacionesReactivasService {
         );
 
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
-        firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
+        firebasePushService.enviarNotificacionPush(
+                idCliente, titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
     // 6. EL CLIENTE RECHAZA LA OFERTA DE LA CASA (Desde Backend)
     // =================================================================================
-    public void notificarOfertaRechazadaPorCliente(Cliente cliente, String nombreBien, String sucursalRetiro, double cargoDevolucion, Integer referenciaId) {
+    public void notificarOfertaRechazadaPorCliente(
+            Cliente cliente,
+            String nombreBien,
+            String sucursalRetiro,
+            double cargoDevolucion,
+            String moneda,
+            Integer referenciaId) {
         String titulo = "Devolución de Artículo";
         String mensajePush = "Has rechazado nuestra propuesta para '" + nombreBien + "'.";
+        String monedaVisible = moneda == null || moneda.isBlank()
+                ? "$" : moneda + " ";
         
         String detalleBd = String.format(
-            "Lamentamos que no hayas aceptado la propuesta de valor base y comisiones para tu '%s'.\n\nPuedes pasar a retirar tu artículo por nuestra sucursal ubicada en %s.\nRecuerda que debes abonar un cargo operativo de $%.2f al momento del retiro.",
-            nombreBien, sucursalRetiro, cargoDevolucion
+            "Lamentamos que no hayas aceptado la propuesta de valor base y comisiones para tu '%s'.\n\nPuedes pasar a retirar tu artículo por nuestra sucursal ubicada en %s. Si no lo retiras, será devuelto al domicilio declarado.\nEl costo de devolución es %s%.2f y queda a cargo del dueño.",
+            nombreBien, sucursalRetiro, monedaVisible, cargoDevolucion
         );
 
-        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.INFORMATIVA, referenciaId);
-        firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -136,7 +160,24 @@ public class NotificacionesReactivasService {
         String detalleBd = "Para avanzar con la evaluación de tu artículo '" + nombreBien + "', la casa de subastas requiere que adjuntes la documentación que acredite su origen lícito.\n\nPor favor, ingresa al detalle de tu consignación para subir los archivos correspondientes.";
 
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
-        firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
+        firebasePushService.enviarNotificacionPush(
+                idCliente, titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
+    }
+
+    public void notificarDocumentacionRecibida(
+            Cliente cliente,
+            String nombreBien,
+            Integer referenciaId) {
+        String titulo = "Documentación recibida";
+        String mensaje = "Recibimos la documentación adicional de '"
+                + nombreBien + "'. La empresa la revisará.";
+        notificacionService.crearNotificacion(
+                cliente, titulo, mensaje,
+                TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensaje,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -152,7 +193,9 @@ public class NotificacionesReactivasService {
         String detalleBd = "Te confirmamos que hemos recibido tu artículo '" + nombreBien + "' en nuestra sucursal de " + sucursal + ".\n\nNuestros expertos procederán con la inspección física. Te notificaremos a la brevedad si el bien es aceptado para subasta y las condiciones de la misma.";
 
         notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
-        firebasePushService.enviarNotificacionPush(idCliente, titulo, mensajePush);
+        firebasePushService.enviarNotificacionPush(
+                idCliente, titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -167,13 +210,17 @@ public class NotificacionesReactivasService {
 
         String detalleBd = String.format(
             "El comprador completó el pago por tu artículo '%s'.\n\n" +
-            "Importe neto acreditado (precio venta - 10%% comisión): $%.2f\n\n" +
+            "Importe neto acreditado (precio de venta - 15%% de comisión): $%.2f\n\n" +
             "La transferencia fue enviada a la cuenta declarada con CBU/IBAN: %s",
             nombreBien, importeNeto, cbuDestino != null ? cbuDestino : "cuenta registrada"
         );
 
-        notificacionService.crearNotificacion(duenio, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
-        firebasePushService.enviarNotificacionPush(duenio.getIdentificador(), titulo, mensajePush);
+        notificacionService.crearNotificacion(
+                duenio, titulo, detalleBd,
+                TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                duenio.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 
     // =================================================================================
@@ -185,7 +232,9 @@ public class NotificacionesReactivasService {
         
         String detalleBd = "Has aceptado exitosamente las condiciones, el valor base y las comisiones para tu artículo '" + nombreBien + "'.\n\nEl mismo ha sido formalmente incluido en el catálogo y será subastado el día " + fechaSubasta + ". Podrás seguir el evento en vivo desde la aplicación.";
 
-        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.INFORMATIVA, referenciaId);
-        firebasePushService.enviarNotificacionPush(cliente.getIdentificador(), titulo, mensajePush);
+        notificacionService.crearNotificacion(cliente, titulo, detalleBd, TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
     }
 }

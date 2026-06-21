@@ -52,9 +52,19 @@ public class SubastaService {
     private FirebasePushService firebasePushService;
     @Autowired
     private NotificacionesReactivasService notificacionesReactivasService;
+    @Autowired
+    private SolicitudConsignacionRepository solicitudConsignacionRepository;
+    @Autowired
+    private DuenioRepository duenioRepository;
+    @Autowired
+    private CuentaDestinoRepository cuentaDestinoRepository;
+    @Autowired
+    private ProductoRepository productoRepository;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
+    private static final String EMAIL_CLIENTE_EMPRESA = "empresa@subastar.com";
+
     private final Map<Integer, EstadoItemActivo> itemsActivos = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 1000)
@@ -323,25 +333,35 @@ public class SubastaService {
                 item.getProducto().getDescripcion(), 
                 valorPujado, 
                 comisiones, 
-                item.getId()
+                solicitudConsignacionRepository
+                        .findIdByProductoId(item.getProducto().getId())
+                        .orElse(null)
             );
         } else {
-            // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
-            item.setSubastado("si"); 
-            item.setPrecioFinal(item.getPrecioBase()); 
-            respuesta.setHayGanador(false);
-            respuesta.setImporteFinal(item.getPrecioBase());
+    // No hubo pujas: la empresa compra el ítem al precio base.
+    item.setSubastado("si");
+    item.setPrecioFinal(item.getPrecioBase());
 
-            double comisiones = item.getPrecioFinal() * 0.15;
-            
-            notificacionesReactivasService.notificarBienVendidoAlDuenio(
-                item.getProducto().getDuenio(), 
-                item.getProducto().getDescripcion(), 
-                item.getPrecioFinal(), 
-                comisiones, 
-                item.getId()
-            );
-        }
+    RegistroSubasta compraEmpresa = registrarCompraEmpresaSiNoExiste(subastaId, item);
+
+    respuesta.setHayGanador(false);
+    respuesta.setIdClienteGanador(compraEmpresa.getClienteId());
+    respuesta.setImporteFinal(item.getPrecioBase());
+    respuesta.setCompraId(compraEmpresa.getIdentificador());
+
+    double valorVenta = item.getPrecioBase();
+    double comisiones = calcularComision(valorVenta, item.getComision());
+
+    notificacionesReactivasService.notificarBienVendidoAlDuenio(
+        item.getProducto().getDuenio(),
+        item.getProducto().getDescripcion(),
+        valorVenta,
+        comisiones,
+        solicitudConsignacionRepository
+                .findIdByProductoId(item.getProducto().getId())
+                .orElse(null)
+    );
+}
 
         
         
@@ -400,12 +420,105 @@ public class SubastaService {
         compra.setModalidadEntrega("pendiente");
         compra.setMedioPagoId(ganadora.getMedioPagoId());
         compra.setEstadoPago("pendiente");
+        compra.setEstadoEntrega("pendiente");
         return registroSubastaRepository.save(compra);
     }
 
+    private RegistroSubasta registrarCompraEmpresaSiNoExiste(
+        Integer subastaId,
+        ItemCatalogo item) {
+
+    Producto producto = item.getProducto();
+
+    if (producto == null || producto.getId() == null) {
+        throw new RuntimeException("500: No se pudo registrar la compra de la empresa");
+    }
+
+    Cliente clienteEmpresa = clienteRepository.findByPersonaEmail(EMAIL_CLIENTE_EMPRESA)
+            .orElseThrow(() -> new RuntimeException(
+                    "500: No existe el cliente empresa con email " + EMAIL_CLIENTE_EMPRESA));
+
+    Optional<RegistroSubasta> registrada = registroSubastaRepository
+            .findFirstBySubastaIdAndProductoIdAndClienteId(
+                    subastaId,
+                    producto.getId(),
+                    clienteEmpresa.getIdentificador());
+
+    if (registrada.isPresent()) {
+        return registrada.get();
+    }
+
+    Double importe = item.getPrecioBase();
+
+    Integer duenioOriginal = producto.getDuenio();
+    RegistroSubasta compra = new RegistroSubasta();
+    compra.setSubastaId(subastaId);
+    compra.setDuenioId(duenioOriginal);
+    compra.setProductoId(producto.getId());
+    compra.setClienteId(clienteEmpresa.getIdentificador());
+    compra.setImporte(importe);
+    compra.setComision(calcularComision(importe, item.getComision()));
+    compra.setCostoEnvio(0.0);
+    compra.setNroPolizaSeguro(producto.getSeguro());
+    compra.setModalidadEntrega("retiro");
+    compra.setMedioPagoId(null);
+    compra.setEstadoPago("pagada");
+    compra.setFechaPago(ahoraNegocio());
+    compra.setEstadoEntrega("entregada");
+    compra.setFechaEntrega(ahoraNegocio());
+    compra = registroSubastaRepository.save(compra);
+    double comisionEmpresa = valor(compra.getComision());
+
+    asegurarDuenioEmpresa(clienteEmpresa);
+    producto.setDuenio(clienteEmpresa.getIdentificador());
+    producto.setDisponible("no");
+    productoRepository.save(producto);
+
+    solicitudConsignacionRepository.findByProductoId(producto.getId())
+            .ifPresent(solicitud -> {
+                solicitud.setEstado("vendida");
+                solicitudConsignacionRepository.save(solicitud);
+                String cbu = cuentaDestinoRepository
+                        .findBySolicitudIdentificadorAndActiva(
+                                solicitud.getIdentificador(), "si")
+                        .map(CuentaDestino::getCbuIban)
+                        .orElse(null);
+                double neto = importe - comisionEmpresa;
+                notificacionesReactivasService.notificarTransferenciaEnviada(
+                        duenioOriginal,
+                        producto.getDescripcion(),
+                        neto,
+                        cbu,
+                        solicitud.getIdentificador());
+            });
+
+    return compra;
+}
+
+    private void asegurarDuenioEmpresa(Cliente clienteEmpresa) {
+        if (duenioRepository.existsById(clienteEmpresa.getIdentificador())) {
+            return;
+        }
+        Duenio duenio = new Duenio();
+        duenio.setId(clienteEmpresa.getIdentificador());
+        duenio.setPersona(clienteEmpresa.getPersona());
+        duenio.setNumeroPais(clienteEmpresa.getPais() == null
+                ? null : clienteEmpresa.getPais().getNumero());
+        duenio.setCalificacionRiesgo(1);
+        duenio.setVerificadorId(clienteEmpresa.getVerificadorId());
+        duenioRepository.save(duenio);
+    }
+
     private double calcularComision(Double importe, Double porcentaje) {
-        if (porcentaje == null || importe == null) return 0.0;
-        return importe * porcentaje / 100.0;
+    if (importe == null || porcentaje == null) {
+        return 0.0;
+    }
+
+    return importe * porcentaje / 100.0;
+}
+
+    private double valor(Double numero) {
+        return numero == null ? 0.0 : numero;
     }
 
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {

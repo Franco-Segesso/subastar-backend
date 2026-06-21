@@ -34,7 +34,7 @@ public class AuthService {
 
     @Transactional
     public void registrarCliente(RegistroRequest req, MultipartFile fotoFrente, MultipartFile fotoDorso) throws Exception {
-        
+
         // 1. Validar unicidad del email
         if (personaRepository.existsByEmail(req.getEmail())) {
             throw new Exception("El email ya está registrado.");
@@ -56,7 +56,7 @@ public class AuthService {
         p.setEmail(req.getEmail());
         p.setDireccion(req.getDireccion());
         p.setFechaNacimiento(req.getFechaNacimiento());
-        p.setEstado("activo"); 
+        p.setEstado("activo");
 
         if (fotoFrente != null && !fotoFrente.isEmpty()) {
             String urlFrente = cloudinaryService.subirImagen(fotoFrente);
@@ -69,17 +69,17 @@ public class AuthService {
 
         // Guardamos la Persona primero para que se le genere el Identificador (ID)
         personaRepository.save(p);
-        personaRepository.flush(); 
+        personaRepository.flush();
 
         // 4. Mapear y guardar el Cliente (Hijo)
         Cliente c = new Cliente();
-        c.setPersona(p); 
-        c.setPais(paisReal); 
-        
-        c.setAdmitido("no"); 
-        c.setCategoria("comun"); 
-        c.setVerificadorId(1); 
-        c.setFechaAprobacion(null); 
+        c.setPersona(p);
+        c.setPais(paisReal);
+
+        c.setAdmitido("pendiente");
+        c.setCategoria("comun");
+        c.setVerificadorId(1);
+        c.setFechaAprobacion(null);
 
         // Guardamos el Cliente
         clienteRepository.save(c);
@@ -87,8 +87,8 @@ public class AuthService {
 
    @Transactional
     public void activarCuenta(ActivarRequest req) throws Exception {
-        
-        
+
+
         // Regla: Mínimo 8 caracteres, 1 número, 1 minúscula, 1 mayúscula, 1 símbolo.
         String patronPassword = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*._-]).{8,}$";
         if (!req.getClave().matches(patronPassword)) {

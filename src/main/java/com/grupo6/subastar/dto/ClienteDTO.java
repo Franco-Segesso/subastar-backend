@@ -10,6 +10,7 @@ public class ClienteDTO {
     private String documento;
     private String direccion;
     private String pais;
+    private String foto;
 
     // Getters y Setters
     public Integer getIdentificador() { return identificador; }
@@ -36,4 +37,7 @@ public class ClienteDTO {
     public void setDireccion(String direccion) { this.direccion = direccion; }
     public String getPais() { return pais; }
     public void setPais(String pais) { this.pais = pais; }
+
+    public String getFoto() { return foto; }
+    public void setFoto(String foto) { this.foto = foto; }
 }
