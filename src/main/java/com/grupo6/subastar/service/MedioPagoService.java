@@ -141,7 +141,9 @@ public class MedioPagoService {
         tarjeta.setEsExtranjera(req.getEsExtranjera());
         tarjeta.setPaisEmisor(req.getPaisEmisor());
 
-        return tarjetaRepository.save(tarjeta);
+        TarjetaCredito guardada = tarjetaRepository.save(tarjeta);
+        evaluarYActualizarCategoria(clienteId);
+        return guardada;
     }
 
     // POST: agregar cuenta bancaria
@@ -171,7 +173,9 @@ public class MedioPagoService {
         cuenta.setFondosReservados(req.getFondosReservados());
         cuenta.setMoneda(req.getMoneda());
 
-        return cuentaRepository.save(cuenta);
+        CuentaBancaria guardada = cuentaRepository.save(cuenta);
+        evaluarYActualizarCategoria(clienteId);
+        return guardada;
     }
 
     // POST: agregar cheque
@@ -201,7 +205,9 @@ public class MedioPagoService {
         cheque.setMontoGarantia(req.getMontoGarantia());
         cheque.setFechaEntrega(req.getFechaEntrega());
 
-        return chequeRepository.save(cheque);
+        ChequeCertificado guardado = chequeRepository.save(cheque);
+        evaluarYActualizarCategoria(clienteId);
+        return guardado;
     }
 
     // DELETE
@@ -358,5 +364,46 @@ public class MedioPagoService {
 
     private double valor(Double numero) {
         return numero == null ? 0.0 : numero;
+    }
+
+    @Transactional
+    public void evaluarYActualizarCategoria(Integer clienteId) {
+        Cliente cliente = clienteRepository.findById(clienteId).orElse(null);
+        if (cliente == null) return;
+
+        long cantidadMedios = medioPagoRepository.findByClienteIdentificadorAndActivo(clienteId, "si").size();
+        long cantidadCompras = registroSubastaRepository.countByClienteId(clienteId);
+
+        String categoriaActual = cliente.getCategoria() != null ? cliente.getCategoria().toLowerCase() : "comun";
+        int pesoActual = obtenerPesoCategoria(categoriaActual);
+        
+        String nuevaCategoria = categoriaActual;
+        int nuevoPeso = pesoActual;
+
+        // Reglas de negocio para ascensos (solo suben, nunca bajan)
+        if (cantidadCompras >= 10 && cantidadMedios >= 5) {
+            if (nuevoPeso < 5) { nuevaCategoria = "platino"; nuevoPeso = 5; }
+        } else if (cantidadCompras >= 5 && cantidadMedios >= 3) {
+            if (nuevoPeso < 4) { nuevaCategoria = "oro"; nuevoPeso = 4; }
+        } else if (cantidadCompras >= 2 || cantidadMedios >= 3) {
+            if (nuevoPeso < 3) { nuevaCategoria = "plata"; nuevoPeso = 3; }
+        } else if (cantidadMedios >= 2 || cantidadCompras >= 1) {
+            if (nuevoPeso < 2) { nuevaCategoria = "especial"; nuevoPeso = 2; }
+        }
+
+        if (!nuevaCategoria.equals(categoriaActual)) {
+            cliente.setCategoria(nuevaCategoria);
+            clienteRepository.save(cliente);
+        }
+    }
+
+    private int obtenerPesoCategoria(String categoria) {
+        switch (categoria) {
+            case "platino": return 5;
+            case "oro": return 4;
+            case "plata": return 3;
+            case "especial": return 2;
+            case "comun": default: return 1;
+        }
     }
 }

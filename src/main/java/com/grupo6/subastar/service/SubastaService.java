@@ -112,10 +112,9 @@ public class SubastaService {
     }
 
     @Transactional
-    public void ingresarSala(Integer subastaId, String emailUsuario) {
+    public void ingresarSala(Integer subastaId, String emailUsuario, boolean soloObservar) {
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario)
                 .orElseThrow(() -> new RuntimeException("404: Cliente no encontrado"));
-        multaService.validarPuedeParticipar(cliente);
         
         Subasta subasta = subastaRepository.findById(subastaId)
                 .orElseThrow(() -> new RuntimeException("404: Subasta no encontrada"));
@@ -124,18 +123,39 @@ public class SubastaService {
             throw new RuntimeException("409: Subasta cerrada");
         }
 
-        int pesoCliente = obtenerPesoCategoria(cliente.getCategoria());
-        int pesoSubasta = obtenerPesoCategoria(subasta.getCategoria());
+        // FASE 2: Validaciones estrictas bloqueadas si solo viene a mirar
+        if (!soloObservar) {
+            // Validamos capacidad de la sala
+            int capacidadMaxima = (subasta.getCapacidadAsistentes() != null) ? subasta.getCapacidadAsistentes() : 50;
+            int postoresActivos = asistenteRepository.countPostoresActivos(subastaId);
+            
+            if (postoresActivos >= capacidadMaxima) {
+                throw new RuntimeException("409: La sala ha alcanzado su capacidad máxima de " + capacidadMaxima + " postores.");
+            }
 
-        if (pesoCliente < pesoSubasta) {
-            throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
+            //validamos que no tenga multas pendientes que le impidan participar
+            multaService.validarPuedeParticipar(cliente);
+
+            int pesoCliente = obtenerPesoCategoria(cliente.getCategoria());
+            int pesoSubasta = obtenerPesoCategoria(subasta.getCategoria());
+
+            //validamos que la categoría del cliente sea suficiente para participar en la subasta
+            if (pesoCliente < pesoSubasta) {
+                throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
+            }
+            
+            //validamos que tenga un medio de pago disponible para la moneda de la subasta
+            medioPagoService.validarDisponibilidadParaSubasta(cliente, subasta.getMoneda());
         }
+
         EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
         if (estadoActivo == null) {
             activarSiguienteItem(subastaId, ahoraNegocio());
             estadoActivo = itemsActivos.get(subastaId);
         }
-        if (estadoActivo != null) {
+
+        // FASE 2: Evitamos validar si es su propio ítem si solo viene a observar
+        if (estadoActivo != null && !soloObservar) {
             ItemCatalogo itemActivo = itemCatalogoRepository
                     .findByIdAndSubastaId(subastaId, estadoActivo.itemId)
                     .orElse(null);
@@ -148,9 +168,6 @@ public class SubastaService {
             }
         }
 
-        medioPagoService.validarDisponibilidadParaSubasta(
-                cliente, subasta.getMoneda());
-
         asistenteRepository.desactivarSesionesFueraDeSubastaAbierta(cliente);
 
         Optional<Asistente> asistenteActual = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si");
@@ -158,7 +175,6 @@ public class SubastaService {
             emitirEstadoActual(subastaId);
             return;
         }
-
         
         if (asistenteRepository.existsByClienteAndActivo(cliente, "si")) {
             throw new RuntimeException("400: El usuario ya está conectado en otra subasta");
@@ -169,8 +185,14 @@ public class SubastaService {
         nuevoAsistente.setSubasta(subasta);
         nuevoAsistente.setActivo("si");
         nuevoAsistente.setFechaIngreso(ahoraNegocio());
-        
-        nuevoAsistente.setNumeroPostor((int) (Math.random() * 1000));
+
+        //Si el cliente entra como observador, le damos el número -1. Si no, un número aleatorio para identificarlo en la sala.
+        if (soloObservar) {
+            nuevoAsistente.setNumeroPostor(-1);
+        } else {
+            nuevoAsistente.setNumeroPostor((int) (Math.random() * 1000) + 1); // +1 para evitar ceros
+        }
+
         
         asistenteRepository.save(nuevoAsistente);
         emitirEstadoActual(subastaId);
@@ -242,6 +264,11 @@ public class SubastaService {
 
         Asistente asistente = asistenteRepository.findByClienteAndSubastaIdAndActivo(cliente, subastaId, "si")
                 .orElseThrow(() -> new RuntimeException("403: Modo observador o no ingresado en sala"));
+
+        // Bloqueo de seguridad para evitar que un cliente pueda pujar estando en modo observador.
+        if (asistente.getNumeroPostor() != null && asistente.getNumeroPostor() == -1) {
+            throw new RuntimeException("403: Estás en modo observador, no podés pujar.");
+        }
 
         // Obtener puja más alta
         Optional<Puja> pujaMaximaOpt = pujaRepository.findTopByItemCatalogoOrderByImporteDesc(item);
@@ -346,6 +373,9 @@ public class SubastaService {
 
             Cliente clienteGanador = ganadora.getAsistente().getCliente();
             String descripcionItem = item.getProducto().getDescripcion();
+            //evaluamos si el cliente ganador sube de categoría por esta compra
+            medioPagoService.evaluarYActualizarCategoria(clienteGanador.getIdentificador());
+            
             Integer consignacionId = solicitudConsignacionRepository
                     .findIdByProductoId(item.getProducto().getId())
                     .orElse(null);

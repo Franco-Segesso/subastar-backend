@@ -22,4 +22,6 @@ public interface RegistroSubastaRepository extends JpaRepository<RegistroSubasta
             "FROM RegistroSubasta r WHERE r.medioPagoId = :medioPagoId " +
             "AND LOWER(r.estadoPago) = 'pendiente'")
     Double sumPendienteByMedioPagoId(@Param("medioPagoId") Integer medioPagoId);
+
+    Integer countByClienteId(Integer clienteId);
 }

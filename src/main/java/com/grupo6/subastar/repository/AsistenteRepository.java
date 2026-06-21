@@ -28,6 +28,9 @@ public interface AsistenteRepository extends JpaRepository<Asistente, Integer> {
                AND (a.subasta IS NULL
                     OR LOWER(TRIM(a.subasta.estado)) <> 'abierta')
             """)
-    int desactivarSesionesFueraDeSubastaAbierta(
-            @Param("cliente") Cliente cliente);
+    int desactivarSesionesFueraDeSubastaAbierta(@Param("cliente") Cliente cliente);
+    
+    // Cuenta los asistentes activos que son postores (excluyendo observadores)
+    @Query("SELECT COUNT(a) FROM Asistente a WHERE a.subasta.id = :subastaId AND LOWER(TRIM(a.activo)) = 'si' AND (a.numeroPostor IS NULL OR a.numeroPostor <> -1)")
+    int countPostoresActivos(@Param("subastaId") Integer subastaId);
 }

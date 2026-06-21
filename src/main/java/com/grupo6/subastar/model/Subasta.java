@@ -43,6 +43,9 @@ public class Subasta {
     @Transient
     private Integer itemActual;
 
+    @Column(name = "capacidadAsistentes")
+    private Integer capacidadAsistentes;
+
     public Subasta() {}
 
     // Getters y Setters
@@ -68,4 +71,6 @@ public class Subasta {
     public void setCantidadPostores(Integer cantidadPostores) { this.cantidadPostores = cantidadPostores; }
     public Integer getItemActual() { return itemActual; }
     public void setItemActual(Integer itemActual) { this.itemActual = itemActual; }
+    public Integer getCapacidadAsistentes() { return capacidadAsistentes; }
+    public void setCapacidadAsistentes(Integer capacidadAsistentes) { this.capacidadAsistentes = capacidadAsistentes; }
 }

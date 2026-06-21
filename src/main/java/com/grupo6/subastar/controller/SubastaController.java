@@ -153,11 +153,12 @@ public class SubastaController {
     @PostMapping("/{id}/ingresar")
     public ResponseEntity<?> ingresarSubasta(
             @PathVariable Integer id,
-            @RequestHeader(value = "Authorization") String token) {
+            @RequestHeader(value = "Authorization") String token,
+            @RequestParam(required = false, defaultValue = "false") boolean soloObservar) {
         try {
             
             String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
-            subastaService.ingresarSala(id, email);
+            subastaService.ingresarSala(id, email, soloObservar);
             return ResponseEntity.ok().build(); // 200 OK
         } catch (RuntimeException e) {
             return manejarExcepciones(e);
