@@ -410,8 +410,12 @@ public class SubastaService {
     }
 
     private double calcularComision(Double importe, Double porcentaje) {
-        return porcentaje == null ? 0.0 : porcentaje;
+    if (importe == null || porcentaje == null) {
+        return 0.0;
     }
+
+    return importe * porcentaje / 100.0;
+}
 
     private void activarSiguienteItem(Integer subastaId, LocalDateTime ahora) {
         if (itemsActivos.containsKey(subastaId)) return;
