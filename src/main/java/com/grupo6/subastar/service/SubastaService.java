@@ -57,6 +57,8 @@ public class SubastaService {
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
+    private static final String EMAIL_CLIENTE_EMPRESA = "empresa@subastar.com";
+
     private final Map<Integer, EstadoItemActivo> itemsActivos = new ConcurrentHashMap<>();
 
     @Scheduled(fixedDelay = 1000)
@@ -330,24 +332,30 @@ public class SubastaService {
                         .orElse(null)
             );
         } else {
-            // Quedó desierto (Para la casa). Lo pasamos a "si" para que NO frene la secuencia.
-            item.setSubastado("si"); 
-            item.setPrecioFinal(item.getPrecioBase()); 
-            respuesta.setHayGanador(false);
-            respuesta.setImporteFinal(item.getPrecioBase());
+    // No hubo pujas: la empresa compra el ítem al precio base.
+    item.setSubastado("si");
+    item.setPrecioFinal(item.getPrecioBase());
 
-            double comisiones = item.getPrecioFinal() * 0.15;
-            
-            notificacionesReactivasService.notificarBienVendidoAlDuenio(
-                item.getProducto().getDuenio(), 
-                item.getProducto().getDescripcion(), 
-                item.getPrecioFinal(), 
-                comisiones, 
-                solicitudConsignacionRepository
-                        .findIdByProductoId(item.getProducto().getId())
-                        .orElse(null)
-            );
-        }
+    RegistroSubasta compraEmpresa = registrarCompraEmpresaSiNoExiste(subastaId, item);
+
+    respuesta.setHayGanador(false);
+    respuesta.setIdClienteGanador(compraEmpresa.getClienteId());
+    respuesta.setImporteFinal(item.getPrecioBase());
+    respuesta.setCompraId(compraEmpresa.getIdentificador());
+
+    double valorVenta = item.getPrecioBase();
+    double comisiones = calcularComision(valorVenta, item.getComision());
+
+    notificacionesReactivasService.notificarBienVendidoAlDuenio(
+        item.getProducto().getDuenio(),
+        item.getProducto().getDescripcion(),
+        valorVenta,
+        comisiones,
+        solicitudConsignacionRepository
+                .findIdByProductoId(item.getProducto().getId())
+                .orElse(null)
+    );
+}
 
         
         
@@ -408,6 +416,48 @@ public class SubastaService {
         compra.setEstadoPago("pendiente");
         return registroSubastaRepository.save(compra);
     }
+
+    private RegistroSubasta registrarCompraEmpresaSiNoExiste(
+        Integer subastaId,
+        ItemCatalogo item) {
+
+    Producto producto = item.getProducto();
+
+    if (producto == null || producto.getId() == null) {
+        throw new RuntimeException("500: No se pudo registrar la compra de la empresa");
+    }
+
+    Cliente clienteEmpresa = clienteRepository.findByPersonaEmail(EMAIL_CLIENTE_EMPRESA)
+            .orElseThrow(() -> new RuntimeException(
+                    "500: No existe el cliente empresa con email " + EMAIL_CLIENTE_EMPRESA));
+
+    Optional<RegistroSubasta> registrada = registroSubastaRepository
+            .findFirstBySubastaIdAndProductoIdAndClienteId(
+                    subastaId,
+                    producto.getId(),
+                    clienteEmpresa.getIdentificador());
+
+    if (registrada.isPresent()) {
+        return registrada.get();
+    }
+
+    Double importe = item.getPrecioBase();
+
+    RegistroSubasta compra = new RegistroSubasta();
+    compra.setSubastaId(subastaId);
+    compra.setDuenioId(producto.getDuenio());
+    compra.setProductoId(producto.getId());
+    compra.setClienteId(clienteEmpresa.getIdentificador());
+    compra.setImporte(importe);
+    compra.setComision(calcularComision(importe, item.getComision()));
+    compra.setCostoEnvio(null);
+    compra.setNroPolizaSeguro(producto.getSeguro());
+    compra.setModalidadEntrega("empresa");
+    compra.setMedioPagoId(null);
+    compra.setEstadoPago("pendiente");
+
+    return registroSubastaRepository.save(compra);
+}
 
     private double calcularComision(Double importe, Double porcentaje) {
     if (importe == null || porcentaje == null) {
