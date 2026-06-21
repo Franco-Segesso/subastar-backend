@@ -14,7 +14,7 @@ public class VigilianteVencimientosService {
 
     private final MultaService multaService;
 
-    public VigilanteVencimientosService(MultaService multaService) {
+    public VigilianteVencimientosService(MultaService multaService) {
         this.multaService = multaService;
     }
 

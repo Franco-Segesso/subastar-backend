@@ -156,7 +156,28 @@ public class NotificacionesReactivasService {
     }
 
     // =================================================================================
-    // 9. ACEPTACIÓN DE LA OFERTA POR EL CLIENTE (Desde Backend)
+    // 9. TRANSFERENCIA ENVIADA AL DUEÑO ORIGINAL (Desde CompraService al pagar)
+    // =================================================================================
+    public void notificarTransferenciaEnviada(Integer idDuenio, String nombreBien, double importeNeto, String cbuDestino, Integer referenciaId) {
+        Cliente duenio = clienteRepository.findById(idDuenio)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado con ID: " + idDuenio));
+
+        String titulo = "Transferencia acreditada";
+        String mensajePush = "El pago por tu bien '" + nombreBien + "' fue enviado a tu cuenta destino.";
+
+        String detalleBd = String.format(
+            "El comprador completó el pago por tu artículo '%s'.\n\n" +
+            "Importe neto acreditado (precio venta - 10%% comisión): $%.2f\n\n" +
+            "La transferencia fue enviada a la cuenta declarada con CBU/IBAN: %s",
+            nombreBien, importeNeto, cbuDestino != null ? cbuDestino : "cuenta registrada"
+        );
+
+        notificacionService.crearNotificacion(duenio, titulo, detalleBd, TipoNotificacion.GANADA, referenciaId);
+        firebasePushService.enviarNotificacionPush(duenio.getIdentificador(), titulo, mensajePush);
+    }
+
+    // =================================================================================
+    // 10. ACEPTACIÓN DE LA OFERTA POR EL CLIENTE (Desde Backend)
     // =================================================================================
     public void notificarAceptacionOfertaCliente(Cliente cliente, String nombreBien, String fechaSubasta, Integer referenciaId) {
         String titulo = "¡Subasta Confirmada!";

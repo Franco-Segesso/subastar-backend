@@ -14,6 +14,7 @@ public class ConsignacionResponse {
     private UbicacionDepositoDTO ubicacionDeposito;
     private SeguroDTO seguro;
     private List<InstanciaDTO> instancias;
+    private Double importeFinalObtenido;
 
     public Integer getIdentificador() { return identificador; }
     public void setIdentificador(Integer identificador) { this.identificador = identificador; }
@@ -35,6 +36,8 @@ public class ConsignacionResponse {
     public void setSeguro(SeguroDTO seguro) { this.seguro = seguro; }
     public List<InstanciaDTO> getInstancias() { return instancias; }
     public void setInstancias(List<InstanciaDTO> instancias) { this.instancias = instancias; }
+    public Double getImporteFinalObtenido() { return importeFinalObtenido; }
+    public void setImporteFinalObtenido(Double importeFinalObtenido) { this.importeFinalObtenido = importeFinalObtenido; }
 
     public static class ProductoConsignadoDTO {
         private Integer identificador;

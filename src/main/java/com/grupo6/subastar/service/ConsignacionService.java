@@ -15,6 +15,7 @@ import com.grupo6.subastar.repository.CuentaBancariaRepository;
 import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.FotoRepository;
 import com.grupo6.subastar.repository.ProductoRepository;
+import com.grupo6.subastar.repository.RegistroSubastaRepository;
 import com.grupo6.subastar.repository.SolicitudConsignacionRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -49,6 +50,8 @@ public class ConsignacionService {
     private SolicitudConsignacionRepository solicitudRepository;
     @Autowired
     private CuentaBancariaRepository cuentaBancariaRepository;
+    @Autowired
+    private RegistroSubastaRepository registroSubastaRepository;
     @Autowired
     private CloudinaryService cloudinaryService;
     @Autowired
@@ -255,6 +258,16 @@ public class ConsignacionService {
         response.setUbicacionDeposito(aUbicacionDto());
         response.setSeguro(aSeguroDto());
         response.setInstancias(aInstanciasDto(solicitud));
+
+        if ("vendida".equals(normalizar(solicitud.getEstado())) && producto != null) {
+            registroSubastaRepository
+                    .findFirstByProductoIdAndEstadoPago(producto.getId(), "pagada")
+                    .ifPresent(reg -> {
+                        double importe = reg.getImporte() == null ? 0.0 : reg.getImporte();
+                        response.setImporteFinalObtenido(importe * 0.90);
+                    });
+        }
+
         return response;
     }
 
@@ -273,7 +286,8 @@ public class ConsignacionService {
     }
 
     private ConsignacionResponse.CondicionesEmpresaDTO aCondicionesDto(SolicitudConsignacion solicitud) {
-        if (!"aceptado".equals(normalizar(solicitud.getEstado()))) return null;
+        String estado = normalizar(solicitud.getEstado());
+        if (!"aceptado".equals(estado) && !"vendida".equals(estado)) return null;
         ConsignacionResponse.CondicionesEmpresaDTO dto = new ConsignacionResponse.CondicionesEmpresaDTO();
         dto.setPrecioBase(3000.0);
         dto.setComisionEmpresa(10.0);
@@ -304,14 +318,17 @@ public class ConsignacionService {
                 : "--";
         boolean aceptado = "aceptado".equals(normalizar(solicitud.getEstado()));
         boolean rechazado = "rechazado".equals(normalizar(solicitud.getEstado()));
+        boolean vendida = "vendida".equals(normalizar(solicitud.getEstado()));
         boolean condiciones = "si".equals(normalizar(solicitud.getCondicionesAceptadas()));
 
         List<ConsignacionResponse.InstanciaDTO> instancias = new ArrayList<>();
         instancias.add(new ConsignacionResponse.InstanciaDTO("Solicitud enviada", fecha, true, false));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Recibido en deposito", aceptado || rechazado ? fecha : "--", aceptado || rechazado, false));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Inspeccionado y aceptado", aceptado ? fecha : "--", aceptado, aceptado && !condiciones));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Esperando aceptacion de condiciones", aceptado && condiciones ? fecha : "--", aceptado && condiciones, aceptado && !condiciones));
-        instancias.add(new ConsignacionResponse.InstanciaDTO("Asignacion a subasta", condiciones ? fecha : "--", condiciones, condiciones));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Recibido en deposito", aceptado || rechazado || vendida ? fecha : "--", aceptado || rechazado || vendida, false));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Inspeccionado y aceptado", aceptado || vendida ? fecha : "--", aceptado || vendida, aceptado && !condiciones));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Condiciones aceptadas", condiciones || vendida ? fecha : "--", condiciones || vendida, aceptado && !condiciones));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Asignado a subasta", condiciones || vendida ? fecha : "--", condiciones || vendida, condiciones && !vendida));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Bien vendido en subasta", vendida ? fecha : "--", vendida, false));
+        instancias.add(new ConsignacionResponse.InstanciaDTO("Transferencia enviada al propietario", vendida ? fecha : "--", vendida, false));
         return instancias;
     }
 

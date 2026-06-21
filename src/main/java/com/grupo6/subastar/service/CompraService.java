@@ -5,17 +5,24 @@ import com.grupo6.subastar.dto.ModalidadEntregaResponse;
 import com.grupo6.subastar.dto.PagoCompraResponse;
 import com.grupo6.subastar.model.Catalogo;
 import com.grupo6.subastar.model.Cliente;
+import com.grupo6.subastar.model.CuentaBancaria;
 import com.grupo6.subastar.model.ItemCatalogo;
+import com.grupo6.subastar.model.MedioPago;
 import com.grupo6.subastar.model.Producto;
 import com.grupo6.subastar.model.RegistroSubasta;
 import com.grupo6.subastar.model.Subasta;
 import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.ItemCatalogoRepository;
+import com.grupo6.subastar.repository.MedioPagoRepository;
 import com.grupo6.subastar.repository.ProductoRepository;
 import com.grupo6.subastar.repository.RegistroSubastaRepository;
+import com.grupo6.subastar.repository.SolicitudConsignacionRepository;
 import com.grupo6.subastar.repository.SubastaRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 import java.util.Locale;
 import java.time.LocalDateTime;
@@ -29,6 +36,12 @@ public class CompraService {
     private final ProductoRepository productoRepository;
     private final ItemCatalogoRepository itemRepository;
     private final MedioPagoService medioPagoService;
+    private final SolicitudConsignacionRepository solicitudRepository;
+
+    @Autowired
+    private MedioPagoRepository medioPagoRepository;
+    @Autowired
+    private NotificacionesReactivasService notificacionesReactivasService;
 
     public CompraService(
             ClienteRepository clienteRepository,
@@ -36,13 +49,15 @@ public class CompraService {
             SubastaRepository subastaRepository,
             ProductoRepository productoRepository,
             ItemCatalogoRepository itemRepository,
-            MedioPagoService medioPagoService) {
+            MedioPagoService medioPagoService,
+            SolicitudConsignacionRepository solicitudRepository) {
         this.clienteRepository = clienteRepository;
         this.registroRepository = registroRepository;
         this.subastaRepository = subastaRepository;
         this.productoRepository = productoRepository;
         this.itemRepository = itemRepository;
         this.medioPagoService = medioPagoService;
+        this.solicitudRepository = solicitudRepository;
     }
 
     @Transactional(readOnly = true)
@@ -154,6 +169,41 @@ public class CompraService {
         compra.setEstadoPago("pagada");
         compra.setFechaPago(LocalDateTime.now());
         registroRepository.save(compra);
+
+        // Registrar comprador como nuevo dueño y cerrar consignación
+        Producto producto = productoRepository.findById(compra.getProductoId()).orElse(null);
+        if (producto != null) {
+            producto.setDisponible("vendido");
+            productoRepository.save(producto);
+            solicitudRepository.findByProductoId(producto.getId()).ifPresent(sol -> {
+                sol.setEstado("vendida");
+                solicitudRepository.save(sol);
+            });
+
+            // Notificar al dueño original que recibió la transferencia
+            if (compra.getDuenioId() != null) {
+                String cbuDestino = null;
+                List<MedioPago> mediosDuenio = medioPagoRepository
+                        .findByClienteIdentificadorAndActivo(compra.getDuenioId(), "si");
+                for (MedioPago m : mediosDuenio) {
+                    if (m instanceof CuentaBancaria cb) {
+                        cbuDestino = cb.getCbuIban();
+                        break;
+                    }
+                }
+                double importeNeto = valor(compra.getImporte()) * 0.90;
+                try {
+                    notificacionesReactivasService.notificarTransferenciaEnviada(
+                            compra.getDuenioId(),
+                            producto.getDescripcion(),
+                            importeNeto,
+                            cbuDestino,
+                            compra.getIdentificador());
+                } catch (Exception ignored) {
+                    // No interrumpir el pago si la notificación falla
+                }
+            }
+        }
 
         return new PagoCompraResponse(
                 "La compra se realizo con exito.",

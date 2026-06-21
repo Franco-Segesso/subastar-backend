@@ -16,6 +16,8 @@ public interface RegistroSubastaRepository extends JpaRepository<RegistroSubasta
             Integer productoId,
             Integer clienteId);
 
+    Optional<RegistroSubasta> findFirstByProductoIdAndEstadoPago(Integer productoId, String estadoPago);
+
     @Query("SELECT COALESCE(SUM(r.importe + r.comision + COALESCE(r.costoEnvio, 0)), 0) " +
             "FROM RegistroSubasta r WHERE r.medioPagoId = :medioPagoId " +
             "AND LOWER(r.estadoPago) = 'pendiente'")
