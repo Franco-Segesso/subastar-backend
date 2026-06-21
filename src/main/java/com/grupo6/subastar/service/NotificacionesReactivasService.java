@@ -39,6 +39,67 @@ public class NotificacionesReactivasService {
                 TipoNotificacion.GANADA.name(), referenciaId);
     }
 
+    public void notificarCompraPagada(
+            Cliente comprador,
+            String nombreBien,
+            String moneda,
+            double totalPagado,
+            String modalidad,
+            String destino,
+            Integer compraId) {
+        String importe = moneda + " " + String.format("%.2f", totalPagado);
+        boolean envio = "envio".equalsIgnoreCase(modalidad);
+        String entrega = envio
+                ? "El articulo llegara a tu domicilio en los proximos dias: "
+                        + destino + "."
+                : "El articulo esta esperandote para ser retirado en "
+                        + destino + ".";
+        String titulo = "Compra realizada con exito";
+        String mensajePush = "Pagaste '" + nombreBien + "' por "
+                + importe + ". " + entrega;
+        String detalle = "Tu pago por '" + nombreBien
+                + "' fue confirmado correctamente.\n\nTotal pagado: "
+                + importe + "\n\n" + entrega;
+
+        notificacionService.crearNotificacion(
+                comprador, titulo, detalle, TipoNotificacion.GANADA, compraId);
+        firebasePushService.enviarNotificacionPush(
+                comprador.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.GANADA.name(), compraId);
+    }
+
+    public void notificarConsignacionPagadaAlDuenio(
+            Integer idDuenio,
+            String nombreBien,
+            String nombreComprador,
+            String moneda,
+            double precioVenta,
+            double importeNeto,
+            String cbuDestino,
+            Integer referenciaId) {
+        Cliente duenio = clienteRepository.findById(idDuenio)
+                .orElseThrow(() -> new RuntimeException(
+                        "Cliente no encontrado con ID: " + idDuenio));
+        String precio = moneda + " " + String.format("%.2f", precioVenta);
+        String neto = moneda + " " + String.format("%.2f", importeNeto);
+        String titulo = "Consignacion vendida con exito";
+        String mensajePush = "'" + nombreBien + "' fue comprado por "
+                + nombreComprador + " por " + precio + ".";
+        String detalle = "El comprador " + nombreComprador
+                + " completo el pago de tu consignacion '" + nombreBien
+                + "'.\n\nPrecio final de venta: " + precio
+                + "\nImporte neto a acreditar: " + neto
+                + "\nCuenta destino: "
+                + (cbuDestino == null ? "cuenta registrada" : cbuDestino);
+
+        notificacionService.crearNotificacion(
+                duenio, titulo, detalle,
+                TipoNotificacion.CONSIGNACION, referenciaId);
+        firebasePushService.enviarNotificacionPush(
+                duenio.getIdentificador(), titulo, mensajePush,
+                TipoNotificacion.CONSIGNACION.name(), referenciaId);
+    }
+
     // =================================================================================
     // 2. NOTIFICAR AL VENDEDOR QUE SU BIEN SE VENDIÓ (Desde Backend)
     // =================================================================================

@@ -7,6 +7,7 @@ import com.grupo6.subastar.repository.ClienteRepository;
 import com.grupo6.subastar.repository.NotificacionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 import java.util.List;
@@ -51,6 +52,7 @@ public class NotificacionService {
     }
 
     // Método utilitario para generar notificaciones desde cualquier otro servicio
+    @Transactional
     public void crearNotificacion(Cliente cliente, String titulo, String mensaje, TipoNotificacion tipo, Integer referenciaId) {
         Notificacion nuevaNotif = new Notificacion();
         nuevaNotif.setCliente(cliente);
@@ -61,7 +63,7 @@ public class NotificacionService {
         nuevaNotif.setLeido(false);
         nuevaNotif.setFechaEnvio(LocalDateTime.now());
 
-        notificacionRepository.save(nuevaNotif);
+        notificacionRepository.saveAndFlush(nuevaNotif);
     }
 
     // Método auxiliar para no repetir código

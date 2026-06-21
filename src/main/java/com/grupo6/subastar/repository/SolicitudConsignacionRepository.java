@@ -11,41 +11,46 @@ import java.util.Optional;
 @Repository
 public interface SolicitudConsignacionRepository extends JpaRepository<SolicitudConsignacion, Integer> {
 
-    @Query("""
-            SELECT s FROM SolicitudConsignacion s
-            WHERE s.producto.duenio = :clienteId
-               OR EXISTS (
-                    SELECT r.identificador FROM RegistroSubasta r
-                    WHERE r.productoId = s.producto.id
-                      AND r.duenioId = :clienteId
-               )
-            ORDER BY s.fechaSolicitud DESC
-            """)
+    @Query(value = """
+            SELECT s.*
+              FROM solicitudesConsignacion s
+              JOIN productos p ON p.identificador = s.producto
+             WHERE p.duenio = :clienteId
+                OR EXISTS (
+                    SELECT 1
+                      FROM registroDeSubasta r
+                     WHERE r.producto = s.producto
+                       AND r.duenio = :clienteId
+                )
+             ORDER BY s.fechaSolicitud DESC
+            """, nativeQuery = true)
     List<SolicitudConsignacion> findByClienteId(@Param("clienteId") Integer clienteId);
 
-    @Query("""
-            SELECT s FROM SolicitudConsignacion s
-            WHERE s.identificador = :id
-              AND (
-                    s.producto.duenio = :clienteId
+    @Query(value = """
+            SELECT s.*
+              FROM solicitudesConsignacion s
+              JOIN productos p ON p.identificador = s.producto
+             WHERE s.identificador = :id
+               AND (
+                    p.duenio = :clienteId
                     OR EXISTS (
-                        SELECT r.identificador FROM RegistroSubasta r
-                        WHERE r.productoId = s.producto.id
-                          AND r.duenioId = :clienteId
+                        SELECT 1
+                          FROM registroDeSubasta r
+                         WHERE r.producto = s.producto
+                           AND r.duenio = :clienteId
                     )
-              )
-            """)
+               )
+            """, nativeQuery = true)
     Optional<SolicitudConsignacion> findByIdAndClienteId(@Param("id") Integer id, @Param("clienteId") Integer clienteId);
 
-    @Query("""
-            SELECT COUNT(s) FROM SolicitudConsignacion s
-            WHERE s.producto.duenio = :clienteId
-               OR EXISTS (
-                    SELECT r.identificador FROM RegistroSubasta r
-                    WHERE r.productoId = s.producto.id
-                      AND r.duenioId = :clienteId
-               )
-            """)
+    @Query(value = """
+            SELECT COUNT(DISTINCT s.identificador)
+              FROM solicitudesConsignacion s
+              JOIN productos p ON p.identificador = s.producto
+              LEFT JOIN registroDeSubasta r
+                ON r.producto = s.producto
+             WHERE p.duenio = :clienteId OR r.duenio = :clienteId
+            """, nativeQuery = true)
     long countByClienteId(@Param("clienteId") Integer clienteId);
 
     @Query("SELECT s FROM SolicitudConsignacion s WHERE s.producto.id = :productoId")
