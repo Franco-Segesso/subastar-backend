@@ -17,6 +17,7 @@ public class ConsignacionResponse {
     private CondicionesEmpresaDTO condicionesEmpresa;
     private UbicacionDepositoDTO ubicacionDeposito;
     private SeguroDTO seguro;
+    private CuentaDestinoDTO cuentaDestino;
     private List<DocumentoDTO> documentosOrigen;
     private List<InstanciaDTO> instancias;
 
@@ -46,6 +47,8 @@ public class ConsignacionResponse {
     public void setUbicacionDeposito(UbicacionDepositoDTO ubicacionDeposito) { this.ubicacionDeposito = ubicacionDeposito; }
     public SeguroDTO getSeguro() { return seguro; }
     public void setSeguro(SeguroDTO seguro) { this.seguro = seguro; }
+    public CuentaDestinoDTO getCuentaDestino() { return cuentaDestino; }
+public void setCuentaDestino(CuentaDestinoDTO cuentaDestino) { this.cuentaDestino = cuentaDestino; }
     public List<DocumentoDTO> getDocumentosOrigen() { return documentosOrigen; }
     public void setDocumentosOrigen(List<DocumentoDTO> documentosOrigen) { this.documentosOrigen = documentosOrigen; }
     public List<InstanciaDTO> getInstancias() { return instancias; }

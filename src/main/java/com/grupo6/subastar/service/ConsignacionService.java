@@ -1,12 +1,13 @@
 package com.grupo6.subastar.service;
-
+import com.grupo6.subastar.repository.CuentaDestinoRepository;
+import com.grupo6.subastar.model.CuentaDestino;
 import com.grupo6.subastar.dto.ConsignacionResponse;
+import com.grupo6.subastar.dto.CuentaDestinoDTO;
 import com.grupo6.subastar.dto.CuentaDestinoRequest;
 import com.grupo6.subastar.dto.MensajeResponse;
 import com.grupo6.subastar.dto.RespuestaConsignacionRequest;
 import com.grupo6.subastar.model.Cliente;
 import com.grupo6.subastar.model.Catalogo;
-import com.grupo6.subastar.model.CuentaBancaria;
 import com.grupo6.subastar.model.Duenio;
 import com.grupo6.subastar.model.Deposito;
 import com.grupo6.subastar.model.DocumentoConsignacion;
@@ -16,7 +17,6 @@ import com.grupo6.subastar.model.Producto;
 import com.grupo6.subastar.model.Seguro;
 import com.grupo6.subastar.model.SolicitudConsignacion;
 import com.grupo6.subastar.repository.ClienteRepository;
-import com.grupo6.subastar.repository.CuentaBancariaRepository;
 import com.grupo6.subastar.repository.DuenioRepository;
 import com.grupo6.subastar.repository.DepositoRepository;
 import com.grupo6.subastar.repository.DocumentoConsignacionRepository;
@@ -64,7 +64,7 @@ public class ConsignacionService {
     @Autowired
     private SolicitudConsignacionRepository solicitudRepository;
     @Autowired
-    private CuentaBancariaRepository cuentaBancariaRepository;
+    private CuentaDestinoRepository cuentaDestinoRepository;
     @Autowired
     private SeguroRepository seguroRepository;
     @Autowired
@@ -225,29 +225,76 @@ public class ConsignacionService {
     }
 
     @Transactional
-    public MensajeResponse registrarCuentaDestino(String emailUsuario, Integer id, CuentaDestinoRequest request) {
-        Cliente cliente = obtenerCliente(emailUsuario);
-        solicitudRepository.findByIdAndClienteId(id, cliente.getIdentificador())
-                .orElseThrow(() -> new RuntimeException("404: Recurso no encontrado"));
-        if (request == null || esBlanco(request.getBanco()) || esBlanco(request.getCbu_iban()) ||
-                esBlanco(request.getPais()) || esBlanco(request.getMoneda())) {
-            throw new RuntimeException("400: Solicitud invalida");
-        }
-        String moneda = request.getMoneda().toUpperCase(Locale.ROOT);
-        if (!"ARS".equals(moneda) && !"USD".equals(moneda)) {
-            throw new RuntimeException("400: Solicitud invalida");
-        }
+public MensajeResponse registrarCuentaDestino(String emailUsuario, Integer id, CuentaDestinoRequest request) {
+    Cliente cliente = obtenerCliente(emailUsuario);
 
-        CuentaBancaria cuenta = new CuentaBancaria();
-        cuenta.setCliente(cliente);
-        cuenta.setActivo("si");
-        cuenta.setCbuIban(request.getCbu_iban());
-        cuenta.setBanco(request.getBanco());
-        cuenta.setPaisBanco(request.getPais());
-        cuenta.setMoneda(moneda);
-        cuentaBancariaRepository.save(cuenta);
-        return new MensajeResponse("Cuenta destino registrada");
+    SolicitudConsignacion solicitud = solicitudRepository.findByIdAndClienteId(id, cliente.getIdentificador())
+            .orElseThrow(() -> new RuntimeException("403: La consignacion no pertenece al cliente"));
+
+    if (request == null || esBlanco(request.getBanco()) || esBlanco(request.getCbu_iban()) ||
+            esBlanco(request.getPais()) || esBlanco(request.getMoneda())) {
+        throw new RuntimeException("400: Solicitud invalida");
     }
+
+    String moneda = request.getMoneda().trim().toUpperCase(Locale.ROOT);
+    if (!"ARS".equals(moneda) && !"USD".equals(moneda)) {
+        throw new RuntimeException("400: Solicitud invalida");
+    }
+
+    if (cuentaDestinoRepository.existsBySolicitudIdentificadorAndActiva(id, "si")) {
+        throw new RuntimeException("409: La cuenta destino ya fue registrada");
+    }
+
+    ItemCatalogo item = buscarItemCatalogo(solicitud.getProducto());
+    if (item != null && subastaYaInicio(item)) {
+        throw new RuntimeException("409: La subasta ya inicio, no se puede modificar la cuenta");
+    }
+
+    asegurarDuenio(cliente);
+
+    Duenio duenio = duenioRepository.findById(cliente.getIdentificador())
+            .orElseThrow(() -> new RuntimeException("500: Error interno del servidor"));
+
+    CuentaDestino cuentaDestino = new CuentaDestino();
+    cuentaDestino.setDuenio(duenio);
+    cuentaDestino.setSolicitud(solicitud);
+    cuentaDestino.setBanco(request.getBanco().trim());
+    cuentaDestino.setCbuIban(request.getCbu_iban().trim());
+    cuentaDestino.setPais(request.getPais().trim());
+    cuentaDestino.setMoneda(moneda);
+    cuentaDestino.setActiva("si");
+
+    cuentaDestinoRepository.save(cuentaDestino);
+
+    return new MensajeResponse("Cuenta destino registrada");
+}
+
+private boolean subastaYaInicio(ItemCatalogo item) {
+    if (item == null || item.getCatalogo() == null || item.getCatalogo().getSubasta() == null) {
+        return false;
+    }
+
+    if (item.getCatalogo().getSubasta().getFecha() == null || item.getCatalogo().getSubasta().getHora() == null) {
+        return false;
+    }
+
+    LocalDateTime inicioSubasta = LocalDateTime.of(
+            item.getCatalogo().getSubasta().getFecha(),
+            item.getCatalogo().getSubasta().getHora()
+    );
+
+    return !LocalDateTime.now().isBefore(inicioSubasta);
+}
+
+private CuentaDestino buscarCuentaDestino(SolicitudConsignacion solicitud) {
+    if (solicitud == null || solicitud.getIdentificador() == null) {
+        return null;
+    }
+
+    return cuentaDestinoRepository
+            .findBySolicitudIdentificadorAndActiva(solicitud.getIdentificador(), "si")
+            .orElse(null);
+}
 
     public MensajeResponse registrarDocumentacion(String emailUsuario, Integer id, List<MultipartFile> archivos, String descripcion) {
         Cliente cliente = obtenerCliente(emailUsuario);
@@ -310,8 +357,10 @@ public class ConsignacionService {
         Deposito deposito = buscarDeposito(producto);
         ItemCatalogo item = buscarItemCatalogo(producto);
         Catalogo catalogoPropuesto = buscarCatalogoPropuesto(solicitud);
+        CuentaDestino cuentaDestino = buscarCuentaDestino(solicitud);
 
         ConsignacionResponse response = new ConsignacionResponse();
+        
         response.setIdentificador(solicitud.getIdentificador());
         response.setEstado(solicitud.getEstado());
         response.setMotivoRechazo(solicitud.getMotivoRechazo());
@@ -331,6 +380,15 @@ public class ConsignacionService {
         response.setSeguro(aSeguroDto(seguro, item, catalogoPropuesto));
         response.setDocumentosOrigen(aDocumentosDto(solicitud));
         response.setInstancias(aInstanciasDto(solicitud, deposito, seguro, item));
+        if (cuentaDestino != null) {
+        response.setCuentaDestino(new CuentaDestinoDTO(
+                cuentaDestino.getIdentificador(),
+                cuentaDestino.getBanco(),
+                cuentaDestino.getCbuIban(),
+                cuentaDestino.getPais(),
+                cuentaDestino.getMoneda()
+        ));
+}
         return response;
     }
 
