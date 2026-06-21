@@ -16,7 +16,8 @@ import com.grupo6.subastar.repository.RegistroSubastaRepository;
 import com.grupo6.subastar.repository.SubastaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.grupo6.subastar.model.Duenio;
+import com.grupo6.subastar.repository.DuenioRepository;
 import java.util.Locale;
 import java.time.LocalDateTime;
 
@@ -29,22 +30,25 @@ public class CompraService {
     private final SubastaRepository subastaRepository;
     private final ProductoRepository productoRepository;
     private final ItemCatalogoRepository itemRepository;
+    private final DuenioRepository duenioRepository;
     private final MedioPagoService medioPagoService;
 
     public CompraService(
-            ClienteRepository clienteRepository,
-            RegistroSubastaRepository registroRepository,
-            SubastaRepository subastaRepository,
-            ProductoRepository productoRepository,
-            ItemCatalogoRepository itemRepository,
-            MedioPagoService medioPagoService) {
-        this.clienteRepository = clienteRepository;
-        this.registroRepository = registroRepository;
-        this.subastaRepository = subastaRepository;
-        this.productoRepository = productoRepository;
-        this.itemRepository = itemRepository;
-        this.medioPagoService = medioPagoService;
-    }
+        ClienteRepository clienteRepository,
+        RegistroSubastaRepository registroRepository,
+        SubastaRepository subastaRepository,
+        ProductoRepository productoRepository,
+        ItemCatalogoRepository itemRepository,
+        DuenioRepository duenioRepository,
+        MedioPagoService medioPagoService) {
+    this.clienteRepository = clienteRepository;
+    this.registroRepository = registroRepository;
+    this.subastaRepository = subastaRepository;
+    this.productoRepository = productoRepository;
+    this.itemRepository = itemRepository;
+    this.duenioRepository = duenioRepository;
+    this.medioPagoService = medioPagoService;
+}
 
     @Transactional(readOnly = true)
     public CompraDTO obtenerCompra(String email, Integer compraId) {
@@ -150,9 +154,14 @@ public class CompraService {
                 subasta.getMoneda(),
                 total);
 
+        LocalDateTime ahora = LocalDateTime.now();
+
         compra.setMedioPagoId(medioPagoId);
         compra.setEstadoPago("pagada");
-        compra.setFechaPago(LocalDateTime.now());
+        compra.setFechaPago(ahora);
+
+        transferirPropiedadAlComprador(compra, cliente, ahora);
+
         registroRepository.save(compra);
 
         return new PagoCompraResponse(
@@ -161,6 +170,41 @@ public class CompraService {
                 compra.getEstadoPago(),
                 medioPagoId);
     }
+
+    private void transferirPropiedadAlComprador(
+        RegistroSubasta compra,
+        Cliente cliente,
+        LocalDateTime fechaEntrega) {
+
+    Producto producto = productoRepository.findById(compra.getProductoId())
+            .orElseThrow(() -> new RuntimeException("404: Producto inexistente"));
+
+    Duenio nuevoDuenio = duenioRepository.findById(cliente.getIdentificador())
+            .orElseGet(() -> crearDuenioDesdeCliente(cliente));
+
+    producto.setDuenio(nuevoDuenio.getId());
+    producto.setDisponible("no");
+    productoRepository.save(producto);
+
+    compra.setDuenioId(nuevoDuenio.getId());
+    compra.setEstadoEntrega("entregada");
+    compra.setFechaEntrega(fechaEntrega);
+}
+
+private Duenio crearDuenioDesdeCliente(Cliente cliente) {
+    Duenio duenio = new Duenio();
+
+    duenio.setId(cliente.getIdentificador());
+
+    if (cliente.getPais() != null) {
+        duenio.setNumeroPais(cliente.getPais().getNumero());
+    }
+
+    duenio.setCalificacionRiesgo(1);
+    duenio.setVerificadorId(cliente.getVerificadorId());
+
+    return duenioRepository.save(duenio);
+}
 
     private Cliente obtenerCliente(String email) {
         return clienteRepository.findByPersonaEmail(email)

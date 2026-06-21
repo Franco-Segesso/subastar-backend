@@ -53,6 +53,12 @@ public class RegistroSubasta {
     @Column(name = "fechaPago")
     private LocalDateTime fechaPago;
 
+    @Column(name = "estadoEntrega")
+    private String estadoEntrega;
+
+    @Column(name = "fechaEntrega")
+    private LocalDateTime fechaEntrega;
+
     public Integer getIdentificador() { return identificador; }
     public Integer getSubastaId() { return subastaId; }
     public void setSubastaId(Integer subastaId) { this.subastaId = subastaId; }
@@ -78,4 +84,9 @@ public class RegistroSubasta {
     public void setEstadoPago(String estadoPago) { this.estadoPago = estadoPago; }
     public LocalDateTime getFechaPago() { return fechaPago; }
     public void setFechaPago(LocalDateTime fechaPago) { this.fechaPago = fechaPago; }
+    public String getEstadoEntrega() { return estadoEntrega; }
+    public void setEstadoEntrega(String estadoEntrega) { this.estadoEntrega = estadoEntrega; }
+
+    public LocalDateTime getFechaEntrega() { return fechaEntrega; }
+    public void setFechaEntrega(LocalDateTime fechaEntrega) { this.fechaEntrega = fechaEntrega; }
 }
