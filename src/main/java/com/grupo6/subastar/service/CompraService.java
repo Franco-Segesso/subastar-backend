@@ -182,19 +182,34 @@ public class CompraService {
         transferirPropiedad(producto, comprador);
         registroRepository.save(compra);
 
+        String nombreComprador = nombreCompleto(comprador);
+        String moneda = subasta.getMoneda() == null
+                ? "" : subasta.getMoneda();
+        String destinoEntrega = destinoEntrega(
+                compra.getModalidadEntrega(), comprador, subasta);
+        notificacionesService.notificarCompraPagada(
+                comprador,
+                producto.getDescripcion(),
+                moneda,
+                total,
+                compra.getModalidadEntrega(),
+                destinoEntrega,
+                compra.getIdentificador());
+
         if (solicitud != null) {
             solicitud.setEstado("vendida");
             solicitudRepository.save(solicitud);
             double importeNeto = valor(compra.getImporte())
                     - valor(compra.getComision());
-            ejecutarDespuesDeCommit(() ->
-                    notificacionesService.notificarTransferenciaEnviada(
-                            compra.getDuenioId(),
-                            producto.getDescripcion(),
-                            valor(compra.getImporte()),
-                            importeNeto,
-                            cuentaDestino.getCbuIban(),
-                            solicitud.getIdentificador()));
+            notificacionesService.notificarConsignacionPagadaAlDuenio(
+                    compra.getDuenioId(),
+                    producto.getDescripcion(),
+                    nombreComprador,
+                    moneda,
+                    valor(compra.getImporte()),
+                    importeNeto,
+                    cuentaDestino.getCbuIban(),
+                    solicitud.getIdentificador());
         }
 
         return new PagoCompraResponse(
@@ -293,6 +308,34 @@ public class CompraService {
 
     private double valor(Double numero) {
         return numero == null ? 0.0 : numero;
+    }
+
+    private String nombreCompleto(Cliente cliente) {
+        if (cliente.getPersona() == null) return "el comprador";
+        String nombre = cliente.getPersona().getNombre() == null
+                ? "" : cliente.getPersona().getNombre().trim();
+        String apellido = cliente.getPersona().getApellido() == null
+                ? "" : cliente.getPersona().getApellido().trim();
+        String completo = (nombre + " " + apellido).trim();
+        return completo.isEmpty() ? "el comprador" : completo;
+    }
+
+    private String destinoEntrega(
+            String modalidad,
+            Cliente comprador,
+            Subasta subasta) {
+        if ("envio".equalsIgnoreCase(modalidad)) {
+            if (comprador.getPersona() != null
+                    && comprador.getPersona().getDireccion() != null
+                    && !comprador.getPersona().getDireccion().isBlank()) {
+                return comprador.getPersona().getDireccion();
+            }
+            return "tu domicilio registrado";
+        }
+        return subasta.getUbicacion() == null
+                || subasta.getUbicacion().isBlank()
+                ? "la sucursal de la casa de subastas"
+                : subasta.getUbicacion();
     }
 
     private void ejecutarDespuesDeCommit(Runnable accion) {
