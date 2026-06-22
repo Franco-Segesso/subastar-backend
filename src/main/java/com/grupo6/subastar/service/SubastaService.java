@@ -372,7 +372,10 @@ public class SubastaService {
             double costoEnvio = 5000.0; // O la lógica que usen para envíos
 
             Cliente clienteGanador = ganadora.getAsistente().getCliente();
-            String descripcionItem = item.getProducto().getDescripcion();
+            String descripcionItem = item.getProducto().getTipo();
+            if (descripcionItem == null || descripcionItem.isBlank()) {
+                descripcionItem = item.getProducto().getDescripcion();
+            }
             //evaluamos si el cliente ganador sube de categoría por esta compra
             medioPagoService.evaluarYActualizarCategoria(clienteGanador.getIdentificador());
             
