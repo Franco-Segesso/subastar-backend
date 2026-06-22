@@ -6,6 +6,9 @@ public class CierreSubastaDTO {
     private Integer idClienteGanador;
     private Double importeFinal;
     private Integer compraId;
+    private boolean pagoAutomatico;
+    private boolean multaGenerada;
+    private String mensajePago;
 
     // Getters y Setters
     public Integer getItemId() { return itemId; }
@@ -18,4 +21,10 @@ public class CierreSubastaDTO {
     public void setImporteFinal(Double importeFinal) { this.importeFinal = importeFinal; }
     public Integer getCompraId() { return compraId; }
     public void setCompraId(Integer compraId) { this.compraId = compraId; }
+    public boolean isPagoAutomatico() { return pagoAutomatico; }
+    public void setPagoAutomatico(boolean pagoAutomatico) { this.pagoAutomatico = pagoAutomatico; }
+    public boolean isMultaGenerada() { return multaGenerada; }
+    public void setMultaGenerada(boolean multaGenerada) { this.multaGenerada = multaGenerada; }
+    public String getMensajePago() { return mensajePago; }
+    public void setMensajePago(String mensajePago) { this.mensajePago = mensajePago; }
 }

@@ -28,9 +28,7 @@ import java.util.Optional;
 @Service
 public class MultaService {
 
-    private static final long HORAS_PARA_PAGAR_COMPRA = 24;
     private static final long HORAS_PARA_PRESENTAR_FONDOS = 72;
-    private static final int PRIMERA_PUJA_MODULO_MULTAS = 15;
 
     private final MultaRepository multaRepository;
     private final ClienteRepository clienteRepository;
@@ -107,52 +105,49 @@ public class MultaService {
     }
 
     @Transactional
-    public synchronized void generarMultasVencidas(LocalDateTime ahora) {
-        LocalDateTime limitePago = ahora.minusHours(HORAS_PARA_PAGAR_COMPRA);
-        for (Puja puja : pujaRepository
-                .findByGanadorIgnoreCaseAndFechaHoraLessThanEqual("si", limitePago)) {
-            if (puja.getId() == null
-                    || puja.getId() < PRIMERA_PUJA_MODULO_MULTAS) {
-                continue;
-            }
-            if (multaRepository.existsByPujaId(puja.getId())) continue;
-
-            Optional<RegistroSubasta> compraOpt = buscarCompra(puja);
-            if (compraOpt.isEmpty()) continue;
-            RegistroSubasta compra = compraOpt.get();
-            if (!"pendiente".equals(normalizar(compra.getEstadoPago()))) continue;
-
-            Cliente cliente = puja.getAsistente().getCliente();
-            Multa multa = new Multa();
-            multa.setCliente(cliente);
-            multa.setPuja(puja);
-            multa.setImporte(BigDecimal.valueOf(puja.getImporte())
-                    .multiply(BigDecimal.valueOf(0.10))
-                    .setScale(2, RoundingMode.HALF_UP));
-            multa.setEstado("pendiente");
-            LocalDateTime fechaGeneracion =
-                    puja.getFechaHora().plusHours(HORAS_PARA_PAGAR_COMPRA);
-            multa.setFechaGeneracion(fechaGeneracion);
-            multa.setFechaVencimiento(
-                    fechaGeneracion.plusHours(HORAS_PARA_PRESENTAR_FONDOS));
-            multa = multaRepository.save(multa);
-
-            notificacionService.crearNotificacion(
-                    cliente,
-                    "Multa pendiente",
-                    "Vencio el plazo de pago del item #" + puja.getItemCatalogo().getId()
-                            + ". Tenes 72 horas para presentar los fondos.",
-                    TipoNotificacion.MULTA,
-                    multa.getIdentificador());
-            
-            firebasePushService.enviarNotificacionPush(
-                    cliente.getIdentificador(),
-                    "Multa por falta de pago",
-                    "Venció el plazo de 24hs para el ítem #" + puja.getItemCatalogo().getId() + ". Se te ha aplicado una multa del 10%.",
-                    TipoNotificacion.MULTA.name(),
-                    multa.getIdentificador()
-            );
+    public synchronized Multa generarPorFondosInsuficientes(
+            Puja puja,
+            LocalDateTime ahora) {
+        if (puja == null || puja.getId() == null) {
+            throw new RuntimeException(
+                    "500: No se pudo asociar la multa a la puja");
         }
+        if (multaRepository.existsByPujaId(puja.getId())) {
+            throw new RuntimeException(
+                    "409: La puja ya tiene una multa asociada");
+        }
+
+        Cliente cliente = puja.getAsistente().getCliente();
+        Multa multa = new Multa();
+        multa.setCliente(cliente);
+        multa.setPuja(puja);
+        multa.setImporte(BigDecimal.valueOf(puja.getImporte())
+                .multiply(BigDecimal.valueOf(0.10))
+                .setScale(2, RoundingMode.HALF_UP));
+        multa.setEstado("pendiente");
+        multa.setFechaGeneracion(ahora);
+        multa.setFechaVencimiento(
+                ahora.plusHours(HORAS_PARA_PRESENTAR_FONDOS));
+        multa = multaRepository.save(multa);
+
+        String mensaje = "Ganaste el item #"
+                + puja.getItemCatalogo().getId()
+                + ", pero el medio elegido no cubre la oferta, comision "
+                + "y envio. Se aplico una multa del 10% y tenes 72 horas "
+                + "para regularizar.";
+        notificacionService.crearNotificacion(
+                cliente,
+                "Fondos insuficientes",
+                mensaje,
+                TipoNotificacion.MULTA,
+                multa.getIdentificador());
+        firebasePushService.enviarNotificacionPush(
+                cliente.getIdentificador(),
+                "Fondos insuficientes",
+                mensaje,
+                TipoNotificacion.MULTA.name(),
+                multa.getIdentificador());
+        return multa;
     }
 
     @Transactional

@@ -21,7 +21,6 @@ public class VigilanteVencimientosService {
     @Scheduled(fixedDelay = 60000)
     public void verificarVencimientosDePago() {
         LocalDateTime ahora = LocalDateTime.now(ZONA_NEGOCIO);
-        multaService.generarMultasVencidas(ahora);
         multaService.derivarVencidasALaJusticia(ahora);
     }
 }

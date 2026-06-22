@@ -63,51 +63,11 @@ public class MedioPagoService {
                 .findByClienteIdentificadorAndActivo(
                         cliente.getIdentificador(), "si");
 
-        if ("USD".equals(moneda)) {
-            boolean tarjetaInternacional = activos.stream().anyMatch(medio -> {
-                if (!(medio instanceof TarjetaCredito tarjeta)
-                        || !"si".equalsIgnoreCase(tarjeta.getEsExtranjera())) {
-                    return false;
-                }
-                try {
-                    validarVencimiento(tarjeta.getVencimiento());
-                    return true;
-                } catch (RuntimeException e) {
-                    return false;
-                }
-            });
-            if (!tarjetaInternacional) {
-                throw new RuntimeException(
-                        "403: Para ingresar a una subasta en USD necesitas una tarjeta internacional vigente");
-            }
-            return;
-        }
-
-        boolean medioEnPesos = activos.stream().anyMatch(medio -> {
-            if (medio instanceof TarjetaCredito tarjeta) {
-                try {
-                    validarVencimiento(tarjeta.getVencimiento());
-                    return true;
-                } catch (RuntimeException e) {
-                    return false;
-                }
-            }
-            if (medio instanceof CuentaBancaria cuenta) {
-                return "ARS".equalsIgnoreCase(cuenta.getMoneda())
-                        && saldo(cuenta.getFondosReservados())
-                        .compareTo(BigDecimal.ZERO) > 0;
-            }
-            if (medio instanceof ChequeCertificado cheque) {
-                return "ARS".equalsIgnoreCase(cheque.getMoneda())
-                        && "si".equalsIgnoreCase(cheque.getVerificadoCheque())
-                        && saldo(cheque.getMontoGarantia())
-                        .compareTo(BigDecimal.ZERO) > 0;
-            }
-            return false;
-        });
-        if (!medioEnPesos) {
+        boolean compatible = activos.stream().anyMatch(
+                medio -> esCompatibleSinValidarSaldo(medio, moneda));
+        if (!compatible) {
             throw new RuntimeException(
-                    "403: Para ingresar a una subasta en ARS necesitas un medio de pago vigente y utilizable en pesos");
+                    "403: Necesitas un medio de pago vigente y compatible con la moneda de la subasta");
         }
     }
 
@@ -223,37 +183,30 @@ public class MedioPagoService {
     public MedioPago validarParaPuja(
             Integer medioPagoId,
             Cliente cliente,
-            String monedaSubasta,
-            Double importeComprometido) {
+            String monedaSubasta) {
         MedioPago medio = obtenerMedioDelCliente(medioPagoId, cliente);
         validarActivoYMoneda(medio, monedaSubasta);
+        return medio;
+    }
 
-        BigDecimal requerido = BigDecimal.valueOf(
-                importeComprometido == null ? 0.0 : importeComprometido);
-        BigDecimal comprometido = BigDecimal.valueOf(valor(
-                registroSubastaRepository.sumPendienteByMedioPagoId(medioPagoId)));
+    @Transactional(readOnly = true)
+    public boolean puedeCubrirTotal(
+            Integer medioPagoId,
+            Cliente cliente,
+            String monedaCompra,
+            Double total) {
+        MedioPago medio = obtenerMedioDelCliente(medioPagoId, cliente);
+        validarActivoYMoneda(medio, monedaCompra);
+        BigDecimal importe = BigDecimal.valueOf(total == null ? 0.0 : total);
 
         if (medio instanceof CuentaBancaria cuenta) {
-            BigDecimal disponible = saldo(cuenta.getFondosReservados()).subtract(comprometido);
-            if (disponible.compareTo(requerido) < 0) {
-                throw new RuntimeException(
-                        "403: Fondos insuficientes. Disponible: "
-                                + disponible.max(BigDecimal.ZERO)
-                                + ". Requerido con comision: " + requerido);
-            }
-        } else if (medio instanceof ChequeCertificado cheque) {
-            if (!"si".equalsIgnoreCase(cheque.getVerificadoCheque())) {
-                throw new RuntimeException("403: El cheque no esta verificado");
-            }
-            BigDecimal disponible = saldo(cheque.getMontoGarantia()).subtract(comprometido);
-            if (disponible.compareTo(requerido) < 0) {
-                throw new RuntimeException(
-                        "403: Garantia insuficiente. Disponible: "
-                                + disponible.max(BigDecimal.ZERO)
-                                + ". Requerido con comision: " + requerido);
-            }
+            return saldo(cuenta.getFondosReservados()).compareTo(importe) >= 0;
         }
-        return medio;
+        if (medio instanceof ChequeCertificado cheque) {
+            return "si".equalsIgnoreCase(cheque.getVerificadoCheque())
+                    && saldo(cheque.getMontoGarantia()).compareTo(importe) >= 0;
+        }
+        return true;
     }
 
     @Transactional
@@ -322,6 +275,20 @@ public class MedioPagoService {
                     && !"si".equalsIgnoreCase(tarjeta.getEsExtranjera())) {
                 throw new RuntimeException("403: Para compras en USD se requiere una tarjeta internacional");
             }
+        }
+    }
+
+    private boolean esCompatibleSinValidarSaldo(
+            MedioPago medio,
+            String moneda) {
+        try {
+            validarActivoYMoneda(medio, moneda);
+            if (medio instanceof ChequeCertificado cheque) {
+                return "si".equalsIgnoreCase(cheque.getVerificadoCheque());
+            }
+            return true;
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 

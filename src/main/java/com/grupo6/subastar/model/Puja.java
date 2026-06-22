@@ -25,6 +25,9 @@ public class Puja {
 
     @Column(name = "medioPago")
     private Integer medioPagoId;
+
+    @Column(name = "modalidadEntrega")
+    private String modalidadEntrega;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "item", referencedColumnName = "identificador")
@@ -58,4 +61,6 @@ public class Puja {
     public void setAsistente(Asistente asistente) { this.asistente = asistente; }
     public Integer getMedioPagoId() { return medioPagoId; }
     public void setMedioPagoId(Integer medioPagoId) { this.medioPagoId = medioPagoId; }
+    public String getModalidadEntrega() { return modalidadEntrega; }
+    public void setModalidadEntrega(String modalidadEntrega) { this.modalidadEntrega = modalidadEntrega; }
 }

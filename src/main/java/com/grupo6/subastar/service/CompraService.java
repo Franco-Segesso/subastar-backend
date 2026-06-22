@@ -219,6 +219,85 @@ public class CompraService {
                 medioPagoId);
     }
 
+    @Transactional
+    public boolean intentarPagoAutomatico(RegistroSubasta compra) {
+        Cliente comprador = clienteRepository.findById(compra.getClienteId())
+                .orElseThrow(() -> new RuntimeException(
+                        "404: Cliente comprador inexistente"));
+        Subasta subasta = obtenerSubasta(compra);
+        Producto producto = obtenerProducto(compra);
+        SolicitudConsignacion solicitud = solicitudRepository
+                .findByProductoId(producto.getId())
+                .orElse(null);
+        CuentaDestino cuentaDestino = solicitud == null ? null
+                : cuentaDestinoRepository
+                        .findBySolicitudIdentificadorAndActiva(
+                                solicitud.getIdentificador(), "si")
+                        .orElse(null);
+
+        if (solicitud != null && cuentaDestino == null) {
+            throw new RuntimeException(
+                    "409: El vendedor no registro una cuenta destino");
+        }
+        if (cuentaDestino != null
+                && !subasta.getMoneda().equalsIgnoreCase(
+                        cuentaDestino.getMoneda())) {
+            throw new RuntimeException(
+                    "409: La cuenta destino no coincide con la moneda de la subasta");
+        }
+
+        double total = valor(compra.getImporte())
+                + valor(compra.getComision())
+                + valor(compra.getCostoEnvio());
+        if (!medioPagoService.puedeCubrirTotal(
+                compra.getMedioPagoId(),
+                comprador,
+                subasta.getMoneda(),
+                total)) {
+            return false;
+        }
+
+        medioPagoService.cobrar(
+                compra.getMedioPagoId(),
+                comprador,
+                subasta.getMoneda(),
+                total);
+        compra.setEstadoPago("pagada");
+        compra.setFechaPago(LocalDateTime.now());
+        compra.setEstadoEntrega("pendiente");
+        transferirPropiedad(producto, comprador);
+        registroRepository.save(compra);
+
+        String moneda = subasta.getMoneda() == null
+                ? "" : subasta.getMoneda();
+        notificacionesService.notificarCompraPagada(
+                comprador,
+                producto.getDescripcion(),
+                moneda,
+                total,
+                compra.getModalidadEntrega(),
+                destinoEntrega(
+                        compra.getModalidadEntrega(), comprador, subasta),
+                compra.getIdentificador());
+
+        if (solicitud != null) {
+            solicitud.setEstado("vendida");
+            solicitudRepository.save(solicitud);
+            double importeNeto = valor(compra.getImporte())
+                    - valor(compra.getComision());
+            notificacionesService.notificarConsignacionPagadaAlDuenio(
+                    compra.getDuenioId(),
+                    producto.getDescripcion(),
+                    nombreCompleto(comprador),
+                    moneda,
+                    valor(compra.getImporte()),
+                    importeNeto,
+                    cuentaDestino.getCbuIban(),
+                    solicitud.getIdentificador());
+        }
+        return true;
+    }
+
     private void transferirPropiedad(
             Producto producto,
             Cliente comprador) {

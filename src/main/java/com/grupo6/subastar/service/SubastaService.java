@@ -60,6 +60,8 @@ public class SubastaService {
     private CuentaDestinoRepository cuentaDestinoRepository;
     @Autowired
     private ProductoRepository productoRepository;
+    @Autowired
+    private CompraService compraService;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -226,8 +228,19 @@ public class SubastaService {
     @Transactional
     public synchronized PujaMensajeDTO procesarPuja(Integer subastaId, PujaRequest request, String emailUsuario) {
         if (request == null || request.getItemId() == null
-                || request.getImporte() == null || request.getMedioPagoId() == null) {
-            throw new RuntimeException("400: Debe indicar itemId, importe y medioPagoId");
+                || request.getImporte() == null
+                || request.getMedioPagoId() == null
+                || request.getModalidadEntrega() == null) {
+            throw new RuntimeException(
+                    "400: Debe indicar itemId, importe, medioPagoId "
+                            + "y modalidadEntrega");
+        }
+        String modalidadEntrega = normalizar(
+                request.getModalidadEntrega());
+        if (!"envio".equals(modalidadEntrega)
+                && !"retiro".equals(modalidadEntrega)) {
+            throw new RuntimeException(
+                    "400: Modalidad de entrega invalida");
         }
 
         EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
@@ -292,13 +305,10 @@ public class SubastaService {
             }
         }
 
-        double totalComprometido = request.getImporte()
-                + calcularComision(request.getImporte(), item.getComision());
         medioPagoService.validarParaPuja(
                 request.getMedioPagoId(),
                 cliente,
-                item.getCatalogo().getSubasta().getMoneda(),
-                totalComprometido);
+                item.getCatalogo().getSubasta().getMoneda());
 
         // Crear Puja mapeada a tu entidad exacta
         Puja nuevaPuja = new Puja();
@@ -308,6 +318,7 @@ public class SubastaService {
         nuevaPuja.setFechaHora(ahoraNegocio());
         nuevaPuja.setGanador("no");
         nuevaPuja.setMedioPagoId(request.getMedioPagoId());
+        nuevaPuja.setModalidadEntrega(modalidadEntrega);
         
         pujaRepository.save(nuevaPuja);
 
@@ -367,12 +378,23 @@ public class SubastaService {
             respuesta.setImporteFinal(ganadora.getImporte());
             respuesta.setCompraId(compra.getIdentificador());
 
-            double valorPujado = ganadora.getImporte();
-            double comisiones = valorPujado * 0.15; // Ejemplo: 15% de comisión
-            double costoEnvio = 5000.0; // O la lógica que usen para envíos
+            boolean pagoAutomatico =
+                    compraService.intentarPagoAutomatico(compra);
+            respuesta.setPagoAutomatico(pagoAutomatico);
+            respuesta.setMultaGenerada(!pagoAutomatico);
+            if (pagoAutomatico) {
+                respuesta.setMensajePago(
+                        "La compra se cobro automaticamente con el medio "
+                                + "seleccionado.");
+            } else {
+                multaService.generarPorFondosInsuficientes(
+                        ganadora, ahoraNegocio());
+                respuesta.setMensajePago(
+                        "El medio seleccionado no tenia fondos suficientes. "
+                                + "Se genero una multa del 10%.");
+            }
 
             Cliente clienteGanador = ganadora.getAsistente().getCliente();
-            String descripcionItem = item.getProducto().getDescripcion();
             //evaluamos si el cliente ganador sube de categoría por esta compra
             medioPagoService.evaluarYActualizarCategoria(clienteGanador.getIdentificador());
             
@@ -386,16 +408,6 @@ public class SubastaService {
                             solicitudConsignacionRepository.save(solicitud);
                         });
             }
-            notificacionPostCommit = () -> {
-                notificarSinInterrumpir(() ->
-                        notificacionesReactivasService.notificarSubastaGanada(
-                                clienteGanador,
-                                descripcionItem,
-                                valorPujado,
-                                comisiones,
-                                costoEnvio,
-                                compra.getIdentificador()));
-            };
         } else {
     // No hubo pujas: la empresa compra el ítem al precio base.
     item.setSubastado("si");
@@ -483,9 +495,10 @@ public class SubastaService {
         compra.setImporte(ganadora.getImporte());
         compra.setComision(calcularComision(
                 ganadora.getImporte(), item.getComision()));
-        compra.setCostoEnvio(null);
+        String modalidad = normalizar(ganadora.getModalidadEntrega());
+        compra.setCostoEnvio("envio".equals(modalidad) ? 5000.0 : 0.0);
         compra.setNroPolizaSeguro(producto.getSeguro());
-        compra.setModalidadEntrega("pendiente");
+        compra.setModalidadEntrega(modalidad);
         compra.setMedioPagoId(ganadora.getMedioPagoId());
         compra.setEstadoPago("pendiente");
         compra.setEstadoEntrega("pendiente");
