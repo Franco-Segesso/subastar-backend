@@ -14,4 +14,5 @@ public interface MultaRepository extends JpaRepository<Multa, Integer> {
     boolean existsByClienteIdentificadorAndEstadoIgnoreCase(Integer clienteId, String estado);
     long countByClienteIdentificadorAndEstadoIgnoreCase(Integer clienteId, String estado);
     List<Multa> findByFechaVencimientoLessThanEqual(LocalDateTime fecha);
+
 }

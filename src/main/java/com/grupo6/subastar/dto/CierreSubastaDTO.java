@@ -6,6 +6,7 @@ public class CierreSubastaDTO {
     private Integer idClienteGanador;
     private Double importeFinal;
     private Integer compraId;
+    private boolean multaGenerada; // Nuevo atributo para indicar si se generó una multa
 
     // Getters y Setters
     public Integer getItemId() { return itemId; }
@@ -18,4 +19,6 @@ public class CierreSubastaDTO {
     public void setImporteFinal(Double importeFinal) { this.importeFinal = importeFinal; }
     public Integer getCompraId() { return compraId; }
     public void setCompraId(Integer compraId) { this.compraId = compraId; }
+    public boolean isMultaGenerada() { return multaGenerada; }
+    public void setMultaGenerada(boolean multaGenerada) { this.multaGenerada = multaGenerada; }
 }

@@ -60,6 +60,10 @@ public class SubastaService {
     private CuentaDestinoRepository cuentaDestinoRepository;
     @Autowired
     private ProductoRepository productoRepository;
+    @Autowired
+    private MedioPagoRepository medioPagoRepository;
+    @Autowired
+    private MultaRepository multaRepository;
 
     private static final long DURACION_ITEM_SEGUNDOS = 60;
     private static final ZoneId ZONA_NEGOCIO = ZoneId.of("America/Argentina/Buenos_Aires");
@@ -292,13 +296,13 @@ public class SubastaService {
             }
         }
 
-        double totalComprometido = request.getImporte()
-                + calcularComision(request.getImporte(), item.getComision());
-        medioPagoService.validarParaPuja(
-                request.getMedioPagoId(),
-                cliente,
-                item.getCatalogo().getSubasta().getMoneda(),
-                totalComprometido);
+        //double totalComprometido = request.getImporte()
+        //        + calcularComision(request.getImporte(), item.getComision());
+        //medioPagoService.validarParaPuja(
+        //        request.getMedioPagoId(),
+        //        cliente,
+        //        item.getCatalogo().getSubasta().getMoneda(),
+        //        totalComprometido);
 
         // Crear Puja mapeada a tu entidad exacta
         Puja nuevaPuja = new Puja();
@@ -360,43 +364,76 @@ public class SubastaService {
             
             item.setSubastado("si"); 
             item.setPrecioFinal(ganadora.getImporte()); // Guardamos el monto final
-            RegistroSubasta compra = registrarCompraSiNoExiste(subastaId, item, ganadora);
-
-            respuesta.setHayGanador(true);
-            respuesta.setIdClienteGanador(ganadora.getAsistente().getCliente().getIdentificador());
-            respuesta.setImporteFinal(ganadora.getImporte());
-            respuesta.setCompraId(compra.getIdentificador());
-
-            double valorPujado = ganadora.getImporte();
-            double comisiones = valorPujado * 0.15; // Ejemplo: 15% de comisión
-            double costoEnvio = 5000.0; // O la lógica que usen para envíos
 
             Cliente clienteGanador = ganadora.getAsistente().getCliente();
-            String descripcionItem = item.getProducto().getDescripcion();
-            //evaluamos si el cliente ganador sube de categoría por esta compra
-            medioPagoService.evaluarYActualizarCategoria(clienteGanador.getIdentificador());
-            
-            Integer consignacionId = solicitudConsignacionRepository
-                    .findIdByProductoId(item.getProducto().getId())
-                    .orElse(null);
-            if (consignacionId != null) {
-                solicitudConsignacionRepository.findById(consignacionId)
-                        .ifPresent(solicitud -> {
-                            solicitud.setEstado("vendida");
-                            solicitudConsignacionRepository.save(solicitud);
-                        });
+            double valorPujado = ganadora.getImporte();
+            double comisiones = calcularComision(valorPujado, item.getComision());
+            double totalComprometido = valorPujado + comisiones;
+
+            boolean pagoRechazado = false;
+            try {
+                //Si el medio de pago no tiene saldo/límite, va a lanzar una excepcion
+                medioPagoService.validarParaPuja(ganadora.getMedioPagoId(), clienteGanador, item.getCatalogo().getSubasta().getMoneda(), totalComprometido);
+            } catch (RuntimeException e) {
+                pagoRechazado = true;
             }
-            notificacionPostCommit = () -> {
-                notificarSinInterrumpir(() ->
-                        notificacionesReactivasService.notificarSubastaGanada(
-                                clienteGanador,
-                                descripcionItem,
-                                valorPujado,
-                                comisiones,
-                                costoEnvio,
-                                compra.getIdentificador()));
-            };
-        } else {
+
+            if (pagoRechazado) {
+                // GENERAMOS MULTA
+                Multa nuevaMulta = new Multa();
+                nuevaMulta.setCliente(clienteGanador);
+                nuevaMulta.setPuja(ganadora); // La entidad Multa exige mapear la puja
+                nuevaMulta.setImporte(java.math.BigDecimal.valueOf(valorPujado * 0.10)); // 10%
+                nuevaMulta.setEstado("pendiente");
+                nuevaMulta.setFechaGeneracion(ahoraNegocio());
+                nuevaMulta.setFechaVencimiento(ahoraNegocio().plusDays(3)); // 72 hs
+                multaRepository.save(nuevaMulta);
+
+                //RESPUESTA PARA EL FRONTEND
+                respuesta.setHayGanador(true);
+                respuesta.setIdClienteGanador(clienteGanador.getIdentificador());
+                respuesta.setImporteFinal(valorPujado);
+                respuesta.setMultaGenerada(true);
+
+            } else {
+                
+                // SÍ TIENE FONDOS HACEMOS COMO ANTES
+                RegistroSubasta compra = registrarCompraSiNoExiste(subastaId, item, ganadora);
+
+                respuesta.setHayGanador(true);
+                respuesta.setIdClienteGanador(clienteGanador.getIdentificador());
+                respuesta.setImporteFinal(valorPujado);
+                respuesta.setCompraId(compra.getIdentificador());
+                respuesta.setMultaGenerada(false);
+
+                double costoEnvio = 5000.0; // O la lógica que usen para envíos
+
+                String descripcionItem = item.getProducto().getDescripcion();
+                // evaluamos si el cliente ganador sube de categoría por esta compra
+                medioPagoService.evaluarYActualizarCategoria(clienteGanador.getIdentificador());
+                
+                Integer consignacionId = solicitudConsignacionRepository
+                        .findIdByProductoId(item.getProducto().getId())
+                        .orElse(null);
+                if (consignacionId != null) {
+                    solicitudConsignacionRepository.findById(consignacionId)
+                            .ifPresent(solicitud -> {
+                                solicitud.setEstado("vendida");
+                                solicitudConsignacionRepository.save(solicitud);
+                            });
+                }
+                notificacionPostCommit = () -> {
+                    notificarSinInterrumpir(() ->
+                            notificacionesReactivasService.notificarSubastaGanada(
+                                    clienteGanador,
+                                    descripcionItem,
+                                    valorPujado,
+                                    comisiones,
+                                    costoEnvio,
+                                    compra.getIdentificador()));
+                };
+            } 
+        }else {
     // No hubo pujas: la empresa compra el ítem al precio base.
     item.setSubastado("si");
     item.setPrecioFinal(item.getPrecioBase());
