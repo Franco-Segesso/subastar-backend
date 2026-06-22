@@ -114,7 +114,10 @@ public class SubastaService {
     }
 
     @Transactional
-    public void ingresarSala(Integer subastaId, String emailUsuario, boolean soloObservar) {
+    public void ingresarSala(
+            Integer subastaId,
+            String emailUsuario,
+            boolean soloObservar) {
         Cliente cliente = clienteRepository.findByPersonaEmail(emailUsuario)
                 .orElseThrow(() -> new RuntimeException("404: Cliente no encontrado"));
         
@@ -146,8 +149,6 @@ public class SubastaService {
                 throw new RuntimeException("403: Tu categoría (" + cliente.getCategoria() + ") no es suficiente para participar en esta subasta (" + subasta.getCategoria() + ")");
             }
             
-            //validamos que tenga un medio de pago disponible para la moneda de la subasta
-            medioPagoService.validarDisponibilidadParaSubasta(cliente, subasta.getMoneda());
         }
 
         EstadoItemActivo estadoActivo = itemsActivos.get(subastaId);
